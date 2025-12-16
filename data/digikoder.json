@@ -1,0 +1,582 @@
+{
+  "contents": [
+    {
+      "id": 1,
+      "created_at": "2025-12-15T20:30:20.949Z",
+      "updated_at": "2025-12-15T20:30:20.949Z",
+      "title": "Imported: nO3QrOifFOQ",
+      "url": "https://youtube.com/watch?v=nO3QrOifFOQ",
+      "type": "video",
+      "platform": "youtube",
+      "category": "meditation",
+      "description": "",
+      "keywords": [
+        "imported",
+        "no3qroiffoq"
+      ],
+      "owner": null
+    },
+    {
+      "id": 2,
+      "created_at": "2025-12-15T20:30:20.950Z",
+      "updated_at": "2025-12-15T20:30:20.950Z",
+      "title": "Imported: MlB4lsE_h20",
+      "url": "https://www.youtube.com/watch?v=MlB4lsE_h20&t=6s&ab_channel=GaiaMeditation",
+      "type": "video",
+      "platform": "youtube",
+      "category": "meditation",
+      "description": "",
+      "keywords": [
+        "imported",
+        "mlb4lse",
+        "h20"
+      ],
+      "owner": null
+    },
+    {
+      "id": 3,
+      "created_at": "2025-12-15T20:30:20.951Z",
+      "updated_at": "2025-12-15T20:30:20.951Z",
+      "title": "Imported: nO3QrOifFOQ",
+      "url": "https://youtu.be/nO3QrOifFOQ?si=snlhgwK_lH3Wh3b_",
+      "type": "video",
+      "platform": "youtube",
+      "category": "meditation",
+      "description": "",
+      "keywords": [
+        "imported",
+        "no3qroiffoq"
+      ],
+      "owner": null
+    },
+    {
+      "id": 4,
+      "created_at": "2025-12-15T20:30:20.951Z",
+      "updated_at": "2025-12-15T20:30:20.951Z",
+      "title": "Imported: sYoqCJNPxv4",
+      "url": "https://www.youtube.com/watch?v=sYoqCJNPxv4",
+      "type": "video",
+      "platform": "youtube",
+      "category": "meditation",
+      "description": "",
+      "keywords": [
+        "imported",
+        "syoqcjnpxv4"
+      ],
+      "owner": null
+    },
+    {
+      "id": 5,
+      "created_at": "2025-12-15T20:30:20.951Z",
+      "updated_at": "2025-12-15T20:30:20.951Z",
+      "title": "Imported: MRJl40u1jTA",
+      "url": "https://www.youtube.com/watch?v=MRJl40u1jTA&ab_channel=MettaverseMusic",
+      "type": "video",
+      "platform": "youtube",
+      "category": "meditation",
+      "description": "",
+      "keywords": [
+        "imported",
+        "mrjl40u1jta"
+      ],
+      "owner": null
+    },
+    {
+      "id": 6,
+      "created_at": "2025-12-15T20:30:20.951Z",
+      "updated_at": "2025-12-15T20:30:20.951Z",
+      "title": "Imported: ny6pCzZRnqs",
+      "url": "https://www.youtube.com/watch?v=ny6pCzZRnqs&t=10407s&ab_channel=HawaiiASMRNatureRelaxation",
+      "type": "video",
+      "platform": "youtube",
+      "category": "meditation",
+      "description": "",
+      "keywords": [
+        "imported",
+        "ny6pczzrnqs"
+      ],
+      "owner": null
+    },
+    {
+      "id": 7,
+      "created_at": "2025-12-15T20:30:20.951Z",
+      "updated_at": "2025-12-15T20:30:20.951Z",
+      "title": "Imported: GhNbnKZcCBM",
+      "url": "https://www.youtube.com/watch?v=GhNbnKZcCBM&t=1s&ab_channel=MusiquedeGu%C3%A9rison",
+      "type": "video",
+      "platform": "youtube",
+      "category": "meditation",
+      "description": "",
+      "keywords": [
+        "imported",
+        "ghnbnkzccbm"
+      ],
+      "owner": null
+    },
+    {
+      "id": 8,
+      "created_at": "2025-12-15T20:30:20.951Z",
+      "updated_at": "2025-12-15T20:30:20.951Z",
+      "title": "Imported: 2j0gSVXhzFY",
+      "url": "https://www.youtube.com/watch?v=2j0gSVXhzFY&t=1187s&ab_channel=FlowEnchant%C3%A9",
+      "type": "video",
+      "platform": "youtube",
+      "category": "meditation",
+      "description": "",
+      "keywords": [
+        "imported",
+        "2j0gsvxhzfy"
+      ],
+      "owner": null
+    },
+    {
+      "id": 9,
+      "created_at": "2025-12-15T20:30:20.952Z",
+      "updated_at": "2025-12-15T20:30:20.952Z",
+      "title": "Imported: wXmxxMe37FU",
+      "url": "https://www.youtube.com/watch?v=wXmxxMe37FU&t=5s&ab_channel=%23FRMusiqueenfran%C3%A7ais",
+      "type": "video",
+      "platform": "youtube",
+      "category": "meditation",
+      "description": "",
+      "keywords": [
+        "imported",
+        "wxmxxme37fu"
+      ],
+      "owner": null
+    },
+    {
+      "id": 10,
+      "created_at": "2025-12-15T20:30:20.952Z",
+      "updated_at": "2025-12-15T20:30:20.952Z",
+      "title": "Imported: TxkyFCeWAxs",
+      "url": "https://www.youtube.com/watch?v=TxkyFCeWAxs&pp=ygUbIENvbm5lY3QgdG8gdGhlIExpZ2h0IDMwOjMw",
+      "type": "video",
+      "platform": "youtube",
+      "category": "meditation",
+      "description": "",
+      "keywords": [
+        "imported",
+        "txkyfcewaxs"
+      ],
+      "owner": null
+    },
+    {
+      "id": 11,
+      "created_at": "2025-12-15T20:30:20.952Z",
+      "updated_at": "2025-12-15T20:30:20.952Z",
+      "title": "Imported: oicH3NnfIr8",
+      "url": "https://www.youtube.com/watch?v=oicH3NnfIr8&ab_channel=MettaverseMusic",
+      "type": "video",
+      "platform": "youtube",
+      "category": "meditation",
+      "description": "",
+      "keywords": [
+        "imported",
+        "oich3nnfir8"
+      ],
+      "owner": null
+    },
+    {
+      "id": 12,
+      "created_at": "2025-12-15T20:30:20.953Z",
+      "updated_at": "2025-12-15T20:30:20.953Z",
+      "title": "Imported: GhNbnKZcCBM",
+      "url": "https://www.youtube.com/watch?v=GhNbnKZcCBM&ab_channel=MusiquedeGu%C3%A9rison",
+      "type": "video",
+      "platform": "youtube",
+      "category": "meditation",
+      "description": "",
+      "keywords": [
+        "imported",
+        "ghnbnkzccbm"
+      ],
+      "owner": null
+    },
+    {
+      "id": 13,
+      "created_at": "2025-12-15T20:30:20.959Z",
+      "updated_at": "2025-12-15T20:30:20.959Z",
+      "title": "Imported: frH2DX6FZ2o",
+      "url": "https://www.youtube.com/watch?v=frH2DX6FZ2o&ab_channel=DJRoseRelaxation",
+      "type": "video",
+      "platform": "youtube",
+      "category": "meditation",
+      "description": "",
+      "keywords": [
+        "imported",
+        "frh2dx6fz2o"
+      ],
+      "owner": null
+    },
+    {
+      "id": 14,
+      "created_at": "2025-12-15T20:30:20.962Z",
+      "updated_at": "2025-12-15T20:30:20.962Z",
+      "title": "Imported: wXmxxMe37FU",
+      "url": "https://www.youtube.com/watch?v=wXmxxMe37FU",
+      "type": "video",
+      "platform": "youtube",
+      "category": "meditation",
+      "description": "",
+      "keywords": [
+        "imported",
+        "wxmxxme37fu"
+      ],
+      "owner": null
+    },
+    {
+      "id": 15,
+      "created_at": "2025-12-15T20:30:20.977Z",
+      "updated_at": "2025-12-15T20:30:20.977Z",
+      "title": "Imported: wxZjss7OSg0",
+      "url": "https://www.youtube.com/watch?v=wxZjss7OSg0&ab_channel=ManifestationetAbondance",
+      "type": "video",
+      "platform": "youtube",
+      "category": "meditation",
+      "description": "",
+      "keywords": [
+        "imported",
+        "wxzjss7osg0"
+      ],
+      "owner": null
+    },
+    {
+      "id": 16,
+      "created_at": "2025-12-15T20:30:20.982Z",
+      "updated_at": "2025-12-15T20:30:20.982Z",
+      "title": "Imported: Luf-gm6qilc",
+      "url": "https://www.youtube.com/watch?v=Luf-gm6qilc&ab_channel=C%C3%A9dricMouli%C3%A9%26KellyAura-Topic",
+      "type": "video",
+      "platform": "youtube",
+      "category": "meditation",
+      "description": "",
+      "keywords": [
+        "imported",
+        "luf-gm6qilc"
+      ],
+      "owner": null
+    },
+    {
+      "id": 17,
+      "created_at": "2025-12-15T20:30:20.983Z",
+      "updated_at": "2025-12-15T20:30:20.983Z",
+      "title": "Imported: D62IEBPjUrk",
+      "url": "https://www.youtube.com/watch?v=D62IEBPjUrk&ab_channel=KellyAuraMusic",
+      "type": "video",
+      "platform": "youtube",
+      "category": "meditation",
+      "description": "",
+      "keywords": [
+        "imported",
+        "d62iebpjurk"
+      ],
+      "owner": null
+    },
+    {
+      "id": 18,
+      "created_at": "2025-12-15T20:30:20.983Z",
+      "updated_at": "2025-12-15T20:30:20.983Z",
+      "title": "Imported: ZgHGShn21QU",
+      "url": "https://www.youtube.com/watch?v=ZgHGShn21QU&ab_channel=JennaBlossoms",
+      "type": "video",
+      "platform": "youtube",
+      "category": "meditation",
+      "description": "",
+      "keywords": [
+        "imported",
+        "zghgshn21qu"
+      ],
+      "owner": null
+    },
+    {
+      "id": 19,
+      "created_at": "2025-12-15T20:30:20.985Z",
+      "updated_at": "2025-12-15T20:30:20.985Z",
+      "title": "Imported: d0c0JRmbWX8",
+      "url": "https://www.youtube.com/watch?v=d0c0JRmbWX8&ab_channel=Fr%C3%A9d%C3%A9ricFlorens",
+      "type": "video",
+      "platform": "youtube",
+      "category": "meditation",
+      "description": "",
+      "keywords": [
+        "imported",
+        "d0c0jrmbwx8"
+      ],
+      "owner": null
+    },
+    {
+      "id": 20,
+      "created_at": "2025-12-15T20:30:20.991Z",
+      "updated_at": "2025-12-15T20:30:20.991Z",
+      "title": "Imported: dM-LxU_mMfE",
+      "url": "https://www.youtube.com/watch?v=dM-LxU_mMfE&pp=ygUYbWVkaXRhdGlvbiBkZXMgNyBjaGFrcmFz",
+      "type": "video",
+      "platform": "youtube",
+      "category": "meditation",
+      "description": "",
+      "keywords": [
+        "imported",
+        "dm-lxu",
+        "mmfe"
+      ],
+      "owner": null
+    },
+    {
+      "id": 21,
+      "created_at": "2025-12-15T20:30:21.002Z",
+      "updated_at": "2025-12-15T20:30:21.002Z",
+      "title": "Imported: sDpaevCDf04",
+      "url": "https://www.youtube.com/watch?v=sDpaevCDf04&ab_channel=GaiaMeditation",
+      "type": "video",
+      "platform": "youtube",
+      "category": "meditation",
+      "description": "",
+      "keywords": [
+        "imported",
+        "sdpaevcdf04"
+      ],
+      "owner": null
+    },
+    {
+      "id": 22,
+      "created_at": "2025-12-15T20:30:21.008Z",
+      "updated_at": "2025-12-15T20:30:21.008Z",
+      "title": "Imported: Xaf_wrbB1lQ",
+      "url": "https://youtube.com/watch?v=Xaf_wrbB1lQ",
+      "type": "video",
+      "platform": "youtube",
+      "category": "meditation",
+      "description": "",
+      "keywords": [
+        "imported",
+        "xaf",
+        "wrbb1lq"
+      ],
+      "owner": null
+    },
+    {
+      "id": 23,
+      "created_at": "2025-12-15T20:30:21.010Z",
+      "updated_at": "2025-12-15T20:30:21.010Z",
+      "title": "Imported: AV24S7vo_TQ",
+      "url": "https://www.youtube.com/watch?v=AV24S7vo_TQ&ab_channel=EntrepreneurMotiv%C3%A9",
+      "type": "video",
+      "platform": "youtube",
+      "category": "meditation",
+      "description": "",
+      "keywords": [
+        "imported",
+        "av24s7vo"
+      ],
+      "owner": null
+    },
+    {
+      "id": 27,
+      "created_at": "2025-12-15T20:30:21.023Z",
+      "updated_at": "2025-12-15T20:30:21.023Z",
+      "title": "https://www.facebook.com/reel/391139230221756?fs=e&s=TIeQ9V",
+      "url": "https://www.facebook.com/reel/391139230221756?fs=e&s=TIeQ9V",
+      "type": "video",
+      "platform": "facebook",
+      "category": "meditation",
+      "description": "",
+      "keywords": [
+        "https",
+        "www",
+        "facebook",
+        "com",
+        "reel",
+        "391139230221756"
+      ],
+      "owner": null
+    },
+    {
+      "id": 28,
+      "created_at": "2025-12-15T20:30:21.094Z",
+      "updated_at": "2025-12-15T20:30:21.094Z",
+      "title": "Fréquence 432 Hz - Guérison Profonde",
+      "url": "https://www.youtube.com/watch?v=Op_ZqRd9hYc",
+      "type": "video",
+      "platform": "youtube",
+      "category": "musique",
+      "description": "Musique pour aligner le cœur et l'esprit. Solfeggio frequency.",
+      "keywords": [
+        "432",
+        "fréquence",
+        "guérison",
+        "profonde",
+        "musique",
+        "aligner"
+      ],
+      "owner": null
+    },
+    {
+      "id": 29,
+      "created_at": "2025-12-15T20:30:21.100Z",
+      "updated_at": "2025-12-15T20:30:21.100Z",
+      "title": "Nettoyage Énergétique Guidé",
+      "url": "https://www.youtube.com/watch?v=3M0hJ2qqqqI",
+      "type": "video",
+      "platform": "youtube",
+      "category": "meditation",
+      "description": "Séance courte pour se libérer des énergies négatives de la journée.",
+      "keywords": [
+        "nettoyage",
+        "énergétique",
+        "guidé",
+        "séance",
+        "courte",
+        "libérer"
+      ],
+      "owner": null
+    },
+    {
+      "id": 30,
+      "created_at": "2025-12-15T20:30:21.101Z",
+      "updated_at": "2025-12-15T20:30:21.101Z",
+      "title": "La Loi de l'Attraction : Comprendre les bases",
+      "url": "#",
+      "type": "article",
+      "platform": "other",
+      "category": "documentaire",
+      "description": "Notes sur le documentaire \"Le Secret\" et comment l'appliquer au quotidien.",
+      "keywords": [
+        "loi",
+        "l'attraction",
+        "comprendre",
+        "bases",
+        "notes",
+        "documentaire"
+      ],
+      "owner": null
+    },
+    {
+      "id": 31,
+      "created_at": "2025-12-15T20:30:21.101Z",
+      "updated_at": "2025-12-15T20:30:21.101Z",
+      "title": "Facebook Video 1",
+      "url": "https://www.facebook.com/share/v/15Lgk49KYX/?mibextid=KsPBc6",
+      "type": "video",
+      "platform": "facebook",
+      "category": "meditation",
+      "description": "FB video imported",
+      "keywords": [
+        "video",
+        "facebook",
+        "imported"
+      ],
+      "owner": null
+    },
+    {
+      "id": 32,
+      "created_at": "2025-12-15T20:35:30.677Z",
+      "updated_at": "2025-12-15T20:35:30.677Z",
+      "title": "Fréquence 432 Hz - Guérison Profonde",
+      "url": "https://www.youtube.com/watch?v=Op_ZqRd9hYc",
+      "type": "video",
+      "platform": "youtube",
+      "category": "musique",
+      "description": "Musique pour aligner le cœur et l'esprit. Solfeggio frequency.",
+      "keywords": [
+        "432",
+        "fréquence",
+        "guérison",
+        "profonde",
+        "musique",
+        "aligner"
+      ],
+      "owner": null
+    },
+    {
+      "id": 33,
+      "created_at": "2025-12-15T20:35:30.688Z",
+      "updated_at": "2025-12-15T20:35:30.688Z",
+      "title": "Nettoyage Énergétique Guidé",
+      "url": "https://www.youtube.com/watch?v=3M0hJ2qqqqI",
+      "type": "video",
+      "platform": "youtube",
+      "category": "meditation",
+      "description": "Séance courte pour se libérer des énergies négatives de la journée.",
+      "keywords": [
+        "nettoyage",
+        "énergétique",
+        "guidé",
+        "séance",
+        "courte",
+        "libérer"
+      ],
+      "owner": null
+    },
+    {
+      "id": 34,
+      "created_at": "2025-12-15T20:35:30.688Z",
+      "updated_at": "2025-12-15T20:35:30.688Z",
+      "title": "La Loi de l'Attraction : Comprendre les bases",
+      "url": "#",
+      "type": "article",
+      "platform": "other",
+      "category": "documentaire",
+      "description": "Notes sur le documentaire \"Le Secret\" et comment l'appliquer au quotidien.",
+      "keywords": [
+        "loi",
+        "l'attraction",
+        "comprendre",
+        "bases",
+        "notes",
+        "documentaire"
+      ],
+      "owner": null
+    },
+    {
+      "id": "35",
+      "created_at": "2025-12-15T20:35:30.689Z",
+      "updated_at": "2025-12-15T23:24:57.656Z",
+      "title": "Facebook Video 11",
+      "url": "https://www.facebook.com/reel/923830633281516",
+      "type": "video",
+      "platform": "facebook",
+      "category": "meditation",
+      "description": "FB video imported",
+      "keywords": [
+        "video",
+        "facebook",
+        "imported"
+      ],
+      "owner": null,
+      "addedBy": "unknown",
+      "date": "15/12/2025"
+    },
+    {
+      "id": 37,
+      "created_at": "2025-12-15T23:25:59.877Z",
+      "updated_at": "2025-12-15T23:25:59.877Z",
+      "title": "Prieres",
+      "url": "https://www.instagram.com/reel/DRJgWMKjG1J/?utm_source=ig_web_copy_link&igsh=NTc4MTIwNjQ2YQ==",
+      "type": "video",
+      "platform": "instagram",
+      "category": "meditation",
+      "description": "",
+      "keywords": [
+        "prieres"
+      ],
+      "owner": "mikazicmu@gmail.com"
+    }
+  ],
+  "profiles": [
+    {
+      "created_at": "2025-12-15T22:42:24.552Z",
+      "email": "admin@digikoder.local",
+      "role": "admin"
+    }
+  ],
+  "users": [
+    {
+      "id": 2,
+      "email": "mikazicmu@gmail.com",
+      "password": "$2a$10$hUzbdaY2rjOoAXK1WB7yGeMkVUn6e/uIBZfm.rt8kRKQdoMf0xQTu",
+      "role": "superadmin",
+      "created_at": "2025-12-15T23:10:12.266Z"
+    }
+  ]
+}

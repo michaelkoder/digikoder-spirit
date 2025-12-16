@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
-import { 
+import {
   Play, 
   BookOpen, 
   Music, 
@@ -16,6 +16,14 @@ import {
   Filter,
   ShieldCheck
 } from 'lucide-react';
+// Using local Express+SQLite API instead of Supabase
+
+// Déclaration pour le Facebook SDK
+declare global {
+  interface Window {
+    FB: any;
+  }
+}
 
 // --- TYPES ---
 
@@ -31,12 +39,14 @@ interface ContentItem {
   description?: string;
   addedBy: string;
   date: string;
+  keywords?: string[];
 }
 
 interface User {
   email: string;
   isAuthenticated: boolean;
-  role?: 'admin' | 'user';
+  role?: 'superadmin' | 'admin' | 'user';
+  id?: string;
 }
 
 // --- MOCK DATA (Initial content based on the user's PDF) ---
@@ -410,6 +420,46 @@ const getPlatform = (url: string): 'youtube' | 'facebook' | 'instagram' | 'other
   return 'other';
 };
 
+const getFacebookVideoId = (url: string): string | null => {
+  try {
+    // Pour les reels: facebook.com/reel/403626525522785
+    const reelMatch = url.match(/\/reel\/([0-9]+)/);
+    if (reelMatch) return reelMatch[1];
+    
+    // Pour les vidéos partagées: facebook.com/share/v/15Lgk49KYX ou /share/v/wrxBFfFkCgt9Gkfw
+    const shareMatch = url.match(/\/share\/v\/([a-zA-Z0-9]+)/);
+    if (shareMatch) return shareMatch[1];
+    
+    // Pour les vidéos classiques: facebook.com/watch?v=123456
+    const watchMatch = url.match(/[?&]v=([0-9]+)/);
+    if (watchMatch) return watchMatch[1];
+    
+    return null;
+  } catch (e) {
+    return null;
+  }
+};
+
+// Simple keyword extractor: remove stopwords, count frequency, return top N
+const STOPWORDS = new Set([
+  'le','la','les','de','des','du','et','en','un','une','pour','avec','sur','dans','au','aux','par','se','ce','ces','que','qui','quoi','dans','du','au','a','is','the','of','and','to','in','for','on'
+]);
+
+const extractKeywords = (text: string, maxKeywords = 6) => {
+  if (!text) return [];
+  const words = text
+    .toLowerCase()
+    .replace(/[^a-z0-9àâäéèêëïîôöùûüç'-\s]/gi, ' ')
+    .split(/\s+/)
+    .map(w => w.trim())
+    .filter(w => w && w.length > 2 && !STOPWORDS.has(w));
+
+  const freq: Record<string, number> = {};
+  for (const w of words) freq[w] = (freq[w] || 0) + 1;
+  const sorted = Object.keys(freq).sort((a, b) => freq[b] - freq[a]);
+  return sorted.slice(0, maxKeywords);
+};
+
 // Best-effort URL alive check. Uses noembed for known providers, falls back to HEAD fetch.
 const checkUrlAlive = async (url: string, timeoutMs = 5000): Promise<boolean> => {
   // try noembed first (works for many providers)
@@ -429,13 +479,21 @@ const checkUrlAlive = async (url: string, timeoutMs = 5000): Promise<boolean> =>
     clearTimeout(id);
   }
 
-  // Fallback: attempt a HEAD request to the resource
+  // Fallback: use backend to check URL (avoids CORS)
   const controller2 = new AbortController();
   const id2 = setTimeout(() => controller2.abort(), timeoutMs);
   try {
-    const res2 = await fetch(url, { method: 'HEAD', signal: controller2.signal });
+    const res2 = await fetch('http://localhost:3005/api/check-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+      signal: controller2.signal
+    });
     clearTimeout(id2);
-    if (res2 && (res2.ok || res2.status === 0)) return true; // status 0 for opaque
+    if (res2 && res2.ok) {
+      const data = await res2.json();
+      return data.ok || data.status === 0;
+    }
   } catch (e) {
     // final fallback: consider dead
   } finally {
@@ -447,7 +505,7 @@ const checkUrlAlive = async (url: string, timeoutMs = 5000): Promise<boolean> =>
 
 // --- COMPONENTS ---
 
-const Header = ({ user, onLogout, activeFilter, onFilterChange, onOpenAdd, onOpenAdmin }: any) => {
+const Header = ({ user, onLogout, activeFilter, onFilterChange, onOpenAdd, onOpenAdmin, onOpenUsers, searchQuery, onSearchChange }: any) => {
   const categories: {id: Category | 'all', label: string, icon: any}[] = [
     { id: 'all', label: 'Tout', icon: Filter },
     { id: 'musique', label: 'Fréquences & Musique', icon: Music },
@@ -476,7 +534,24 @@ const Header = ({ user, onLogout, activeFilter, onFilterChange, onOpenAdd, onOpe
           <div className="flex items-center gap-4">
             {user.isAuthenticated ? (
               <>
-                {user.role === 'admin' ? (
+                {user.role === 'superadmin' && (
+                  <>
+                    <button 
+                      onClick={onOpenUsers}
+                      className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-full font-semibold transition-all flex items-center gap-2 text-sm"
+                    >
+                      👥 Utilisateurs
+                    </button>
+                    <button 
+                      onClick={onOpenAdd}
+                      className="bg-amber-400 hover:bg-amber-300 text-black px-4 py-2 rounded-full font-semibold transition-all shadow-[0_0_15px_rgba(251,191,36,0.3)] flex items-center gap-2 text-sm"
+                    >
+                      <Plus size={18} /> Partager
+                    </button>
+                    <span className="text-xs text-purple-200 px-2 py-1 rounded border border-purple-300">👑 SUPER ADMIN</span>
+                  </>
+                )}
+                {user.role === 'admin' && (
                   <>
                     <button 
                       onClick={onOpenAdd}
@@ -486,8 +561,9 @@ const Header = ({ user, onLogout, activeFilter, onFilterChange, onOpenAdd, onOpe
                     </button>
                     <span className="text-xs text-amber-200 px-2 py-1 rounded border border-amber-300">ADMIN</span>
                   </>
-                ) : (
-                  <button onClick={onOpenAdmin} className="text-xs bg-white/5 text-gray-200 px-3 py-1 rounded">Se connecter </button>
+                )}
+                {user.role === 'user' && (
+                  <button onClick={onOpenAdmin} className="text-xs bg-white/5 text-gray-200 px-3 py-1 rounded">Se connecter</button>
                 )}
                 <button onClick={onLogout} className="text-gray-400 hover:text-white transition-colors">
                   <LogOut size={20} />
@@ -497,6 +573,10 @@ const Header = ({ user, onLogout, activeFilter, onFilterChange, onOpenAdd, onOpe
               <span className="text-xs text-gray-400">Mode invité</span>
             )}
           </div>
+        </div>
+
+        <div className="mt-4 flex items-center gap-3">
+          <input value={searchQuery || ''} onChange={(e) => onSearchChange(e.target.value)} placeholder="Rechercher par titre, description ou mot-clé..." className="w-full max-w-xl bg-black/10 border border-white/10 rounded px-3 py-2 text-sm text-white" />
         </div>
 
         {/* Filters Scrollable Area */}
@@ -521,13 +601,13 @@ const Header = ({ user, onLogout, activeFilter, onFilterChange, onOpenAdd, onOpe
   );
 };
 
-const VideoEmbed = ({ url, platform, title, onOpen }: { url: string, platform: string, title: string, onOpen?: (u: string, p: string, t?: string) => void }) => {
+const VideoEmbed = ({ url, platform, title }: { url: string, platform: string, title: string }) => {
   // Always render a visual thumbnail/card in the mosaic. Playback happens in modal only.
   const videoId = platform === 'youtube' ? getYoutubeId(url) : null;
   const thumbnail = videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : null;
 
   return (
-    <div onClick={() => onOpen?.(url, platform, title)} className="relative rounded-lg overflow-hidden group cursor-pointer bg-black/20 hover:scale-[1.01] transition-transform">
+    <div className="relative rounded-lg overflow-hidden group bg-black/20">
       {thumbnail ? (
         <div className="relative">
           <img src={thumbnail} alt={title} className="w-full h-auto block object-cover" />
@@ -552,9 +632,12 @@ const VideoEmbed = ({ url, platform, title, onOpen }: { url: string, platform: s
 
 const ContentCard: React.FC<{ item: ContentItem, user?: User, onOpenVideo?: (u: string, p: string, t?: string) => void, onOpenNote?: (item: ContentItem) => void, onEdit?: (item: ContentItem) => void, onDelete?: (id: string) => void }> = ({ item, user, onOpenVideo, onOpenNote, onEdit, onDelete }) => {
   const isVideo = item.type === 'video';
+  
+  // Permissions: superadmin peut tout éditer, admin peut éditer seulement son propre contenu
+  const canEdit = user?.role === 'superadmin' || (user?.role === 'admin' && item.addedBy === user.email);
 
   return (
-    <div className="break-inside-avoid mb-6 glass-panel rounded-xl overflow-hidden hover:translate-y-[-2px] transition-transform duration-300 group">
+    <div onClick={() => { if (isVideo) onOpenVideo?.(item.url, item.platform || 'other', item.title); else onOpenNote?.(item); }} className="break-inside-avoid mb-6 glass-panel rounded-xl overflow-hidden hover:translate-y-[-2px] transition-transform duration-300 group cursor-pointer">
       {/* Media Area */}
       {isVideo ? (
         <div className="p-2 pb-0">
@@ -583,10 +666,10 @@ const ContentCard: React.FC<{ item: ContentItem, user?: User, onOpenVideo?: (u: 
                   {item.platform === 'youtube' && <Youtube size={14} className="text-red-400" />}
                   {item.platform === 'facebook' && <Facebook size={14} className="text-blue-400" />}
                   {item.platform === 'instagram' && <Instagram size={14} className="text-pink-400" />}
-                  {user?.role === 'admin' && (
+                  {canEdit && (
                     <>
-                      <button onClick={() => onEdit?.(item)} className="text-xs bg-white/5 hover:bg-white/10 px-2 py-1 rounded text-gray-200">Modifier</button>
-                      <button onClick={() => onDelete?.(item.id)} className="text-xs bg-red-600 hover:bg-red-500 px-2 py-1 rounded text-white">Suppr</button>
+                      <button onClick={(e) => { e.stopPropagation(); onEdit?.(item); }} className="text-xs bg-white/5 hover:bg-white/10 px-2 py-1 rounded text-gray-200">Modifier</button>
+                      <button onClick={(e) => { e.stopPropagation(); onDelete?.(item.id); }} className="text-xs bg-red-600 hover:bg-red-500 px-2 py-1 rounded text-white">Suppr</button>
                     </>
                   )}
            </div>
@@ -693,7 +776,7 @@ const AuthScreen = ({ onLogin }: { onLogin: (email: string) => void }) => {
     );
 };
 
-const AddContentModal = ({ isOpen, onClose, onAdd }: any) => {
+const AddContentModal = ({ isOpen, onClose, onAdd, contentType }: any) => {
   const [formData, setFormData] = useState({
       url: '',
       title: '',
@@ -707,6 +790,9 @@ const AddContentModal = ({ isOpen, onClose, onAdd }: any) => {
 
   if (!isOpen) return null;
 
+  const isVideo = contentType === 'video';
+  const isNote = contentType === 'note';
+
   const handleSubmit = (e: React.FormEvent) => {
       e.preventDefault();
       if (parseInt(formData.captcha) !== captchaNum.a + captchaNum.b) {
@@ -714,10 +800,11 @@ const AddContentModal = ({ isOpen, onClose, onAdd }: any) => {
           return;
       }
       onAdd({
-          url: formData.url,
+          url: isNote ? '#' : formData.url,
           title: formData.title,
           category: formData.category,
-          description: formData.description
+          description: formData.description,
+          type: isNote ? 'article' : 'video'
       });
       onClose();
   };
@@ -727,22 +814,41 @@ const AddContentModal = ({ isOpen, onClose, onAdd }: any) => {
         <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose}></div>
         <div className="glass-panel w-full max-w-lg rounded-xl p-6 relative z-10 border border-white/20 shadow-2xl">
             <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-bold text-white font-serif">Partager une pépite</h2>
+                <h2 className="text-xl font-bold text-white font-serif">
+                    {isVideo && '🎬 Ajouter une vidéo'}
+                    {isNote && '📝 Ajouter une note'}
+                    {!isVideo && !isNote && 'Partager une pépite'}
+                </h2>
                 <button onClick={onClose} className="text-gray-400 hover:text-white">Fermer</button>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                    <label className="block text-xs text-gray-400 mb-1">Lien (Youtube, Facebook, Article...)</label>
-                    <input 
-                        required
-                        type="url"
-                        value={formData.url}
-                        onChange={e => setFormData({...formData, url: e.target.value})}
-                        className="w-full bg-black/40 border border-white/10 rounded p-2 text-white focus:border-purple-400 focus:outline-none"
-                        placeholder="https://..."
-                    />
-                </div>
+                {isVideo && (
+                    <div>
+                        <label className="block text-xs text-gray-400 mb-1">Lien vidéo (YouTube, Facebook, Instagram...)</label>
+                        <input 
+                            required
+                            type="url"
+                            value={formData.url}
+                            onChange={e => setFormData({...formData, url: e.target.value})}
+                            className="w-full bg-black/40 border border-white/10 rounded p-2 text-white focus:border-red-400 focus:outline-none"
+                            placeholder="https://youtube.com/watch?v=..."
+                        />
+                    </div>
+                )}
+                
+                {isNote && (
+                    <div>
+                        <label className="block text-xs text-gray-400 mb-1">Lien (optionnel)</label>
+                        <input 
+                            type="url"
+                            value={formData.url}
+                            onChange={e => setFormData({...formData, url: e.target.value})}
+                            className="w-full bg-black/40 border border-white/10 rounded p-2 text-white focus:border-blue-400 focus:outline-none"
+                            placeholder="https://... (facultatif)"
+                        />
+                    </div>
+                )}
                 
                 <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -805,20 +911,38 @@ const AddContentModal = ({ isOpen, onClose, onAdd }: any) => {
 };
 
 const VideoModal = ({ isOpen, onClose, url, platform, title }: { isOpen: boolean, onClose: () => void, url?: string, platform?: string, title?: string }) => {
-  if (!isOpen || !url) return null;
-
   const [iframeLoaded, setIframeLoaded] = useState(false);
   const [iframeFailed, setIframeFailed] = useState(false);
   const [thumbnail, setThumbnail] = useState<string | undefined>(undefined);
   const [reloadKey, setReloadKey] = useState(0);
+  
+
+  const [fbEmbed, setFbEmbed] = useState<{ href?: string, endpoint?: 'post'|'video' } | null>(null);
+  const [fbEndpointOverride, setFbEndpointOverride] = useState<'post'|'video'|null>(null);
+  const [fbRetryDone, setFbRetryDone] = useState(false);
+  const [fbHostAlt, setFbHostAlt] = useState(false); // essai avec m.facebook.com
 
   const buildSrc = (): string => {
     try {
       if (platform === 'facebook') {
-        return `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(url)}&show_text=false`;
-      } else if (platform === 'instagram') {
+        const host = fbHostAlt ? 'https://m.facebook.com' : 'https://www.facebook.com';
+        if (fbEmbed?.href) {
+          const ep = fbEndpointOverride || fbEmbed.endpoint || 'video';
+          const built = `${host}/plugins/${ep}.php?href=${encodeURIComponent(fbEmbed.href)}&show_text=false&width=1200&height=600&adapt_container_width=true&allowfullscreen=true`;
+          return built;
+        }
+        // en attendant la résolution, tenter un premier essai simple
         const u = new URL(url);
-        return `${u.origin}${u.pathname}embed`;
+        const clean = `${u.origin}${u.pathname}`;
+        const isPostLike = /\/(reel|posts)\//.test(u.pathname);
+        const endpoint = isPostLike ? 'post' : 'video';
+        const built = `${host}/plugins/${endpoint}.php?href=${encodeURIComponent(clean)}&show_text=false&width=1200&height=600&adapt_container_width=true&allowfullscreen=true`;
+        return built;
+      } else if (platform === 'instagram') {
+        // Instagram embed: clean URL (strip query), ensure trailing slash, then /embed/
+        const u = new URL(url);
+        const cleanPath = u.pathname.endsWith('/') ? u.pathname : `${u.pathname}/`;
+        return `https://www.instagram.com${cleanPath}embed/`;
       } else if (platform === 'youtube') {
         const id = getYoutubeId(url || '');
         if (id) return `https://www.youtube.com/embed/${id}?autoplay=1&rel=0`;
@@ -830,6 +954,55 @@ const VideoModal = ({ isOpen, onClose, url, platform, title }: { isOpen: boolean
   };
 
   const src = buildSrc();
+
+  // Résoudre l'URL Facebook côté serveur pour obtenir un href canonique
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        if (platform === 'facebook' && url) {
+          const API_BASE = (import.meta.env && (import.meta.env.VITE_API_BASE as string)) || 'http://localhost:3005';
+          const r = await fetch(`${API_BASE}/api/fb/embed?url=${encodeURIComponent(url)}`);
+          if (r.ok) {
+            const j = await r.json();
+            if (!cancelled && j && j.embedHref) {
+              setFbEmbed({ href: j.embedHref, endpoint: j.endpoint === 'post' ? 'post' : 'video' });
+              setFbEndpointOverride(null);
+              setFbRetryDone(false);
+              setFbHostAlt(false); // reset host fallback on new resolve
+              setReloadKey(k => k + 1);
+            }
+          }
+        }
+      } catch (e) {}
+    })();
+    return () => { cancelled = true; };
+  }, [platform, url]);
+
+  useEffect(() => {
+    setIframeLoaded(false);
+    setIframeFailed(false);
+    const timeout = platform === 'facebook' ? 8000 : 5000; // Plus de temps pour Facebook
+    const t = setTimeout(() => {
+      if (!iframeLoaded) {
+        if (platform === 'facebook' && !fbRetryDone) {
+          setFbRetryDone(true);
+          setFbEndpointOverride(prev => (prev === 'post' ? 'video' : prev === 'video' ? 'post' : (fbEmbed?.endpoint === 'post' ? 'video' : 'post')));
+          setReloadKey(k => k + 1);
+          return;
+        } else if (platform === 'facebook' && fbRetryDone && !fbHostAlt) {
+          // deuxième tentative: changer d'hôte vers m.facebook.com
+          setFbHostAlt(true);
+          setFbEndpointOverride(null); // revenir à l'endpoint suggéré
+          setReloadKey(k => k + 1);
+          return;
+        }
+        setIframeFailed(true);
+      }
+    }, timeout);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [url, reloadKey, platform, fbEmbed, fbRetryDone]);
 
   useEffect(() => {
     let cancelled = false;
@@ -854,51 +1027,54 @@ const VideoModal = ({ isOpen, onClose, url, platform, title }: { isOpen: boolean
     return () => { cancelled = true; };
   }, [url, platform]);
 
-  useEffect(() => {
-    setIframeLoaded(false);
-    setIframeFailed(false);
-    const t = setTimeout(() => {
-      if (!iframeLoaded) setIframeFailed(true);
-    }, 5000);
-    return () => clearTimeout(t);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [url, reloadKey]);
+
+
+  // Retirer le second timeout générique pour éviter les conflits avec la logique de retry Facebook
 
   const handleRetry = () => {
     setIframeFailed(false);
     setReloadKey(k => k + 1);
   };
 
-  let paddingTop = '56.25%';
-  try {
-    const u = new URL(url);
-    const path = u.pathname.toLowerCase();
-    if (path.includes('/reel/') || path.includes('/shorts/') || path.includes('/stories/')) {
-      paddingTop = `${(16/9)*100}%`;
-    } else if (platform === 'instagram' && path.includes('/p/')) {
-      paddingTop = '100%';
-    }
-  } catch (e) {}
+  if (!isOpen || !url) return null;
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/70" onClick={onClose}></div>
-      <div className="relative w-full max-w-4xl bg-black/80 rounded-lg overflow-hidden border border-white/10 z-10" style={{maxHeight: '90vh'}}>
-        <div className="flex justify-between items-center p-3 border-b border-white/5">
-          <div className="text-sm text-gray-200">{title || 'Lecture'}</div>
-          <div className="flex items-center gap-2">
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose}></div>
+      <div 
+        className="relative bg-black/90 rounded-xl overflow-hidden border border-white/20 shadow-2xl z-10 w-full max-w-6xl"
+        style={{ maxHeight: '90vh' }}
+      >
+        <div className="flex justify-between items-center p-3 border-b border-white/10 bg-black/60">
+          <div className="text-sm text-gray-200 truncate flex-1">{title || 'Lecture'}</div>
+          <div className="flex items-center gap-2 flex-shrink-0 ml-2">
             {platform === 'facebook' && (
-              <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs bg-white/10 hover:bg-white/20 px-3 py-1 rounded text-white">Ouvrir sur Facebook</a>
+              <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs bg-white/10 hover:bg-white/20 px-3 py-1 rounded text-white whitespace-nowrap">Ouvrir</a>
             )}
-            <button onClick={onClose} className="text-gray-300 hover:text-white px-3">Fermer</button>
+            {platform === 'instagram' && (
+              <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs bg-white/10 hover:bg-white/20 px-3 py-1 rounded text-white whitespace-nowrap">Ouvrir</a>
+            )}
+            <button onClick={onClose} className="text-gray-300 hover:text-white px-3 flex-shrink-0">✕</button>
           </div>
         </div>
 
-        <div style={{paddingTop}} className="relative bg-black">
+        <div className="relative bg-black w-full" style={{ paddingTop: '56.25%' }}>
           {!iframeFailed ? (
-            <iframe key={reloadKey} onLoad={() => setIframeLoaded(true)} className="absolute top-0 left-0 w-full h-full" src={src} title={title} allow="autoplay; encrypted-media; clipboard-write; picture-in-picture" allowFullScreen></iframe>
+            <div className="absolute top-0 left-0 w-full h-full flex items-center justify-center bg-black overflow-auto">
+              <iframe
+                key={reloadKey}
+                onLoad={() => { setIframeLoaded(true); }}
+                className="w-full h-full"
+                src={src}
+                title={title}
+                allow="autoplay; encrypted-media; clipboard-write; picture-in-picture; fullscreen; web-share"
+                sandbox={platform === 'facebook' || platform === 'instagram' ? 'allow-scripts allow-same-origin allow-popups allow-forms allow-storage-access-by-user-activation' : undefined}
+                referrerPolicy="no-referrer-when-downgrade"
+                allowFullScreen
+              ></iframe>
+            </div>
           ) : (
-            <div className="absolute top-0 left-0 w-full h-full flex items-center justify-center p-4">
+            <div className="w-full h-full flex items-center justify-center p-4">
               <div className="max-w-full text-center">
                 {thumbnail ? (
                   <img src={thumbnail} alt={title} className="mx-auto mb-4 max-h-[60vh] object-contain" />
@@ -916,6 +1092,11 @@ const VideoModal = ({ isOpen, onClose, url, platform, title }: { isOpen: boolean
             </div>
           )}
         </div>
+        {platform === 'facebook' && (
+          <div className="px-3 py-2 text-[11px] text-gray-400 border-t border-white/5">
+            Astuce: si Facebook affiche « publication non disponible », activez les cookies tiers pour facebook.com (ou essayez un autre navigateur). Vous pouvez aussi cliquer « Ouvrir sur Facebook ».
+          </div>
+        )}
       </div>
     </div>
   );
@@ -949,24 +1130,53 @@ const NoteModal = ({ isOpen, onClose, note }: { isOpen: boolean, onClose: () => 
   );
 };
 
-const AdminLoginModal = ({ isOpen, onClose, onLogin }: { isOpen: boolean, onClose: () => void, onLogin: (email: string) => void }) => {
-  const [username, setUsername] = useState('');
+const AdminLoginModal = ({ isOpen, onClose, onLogin }: { isOpen: boolean, onClose: () => void, onLogin: (user: any) => void }) => {
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Hardcoded admin credentials
-    const adminUser = 'admin';
-    const adminPass = 'admin123';
-    if (username === adminUser && password === adminPass) {
-      onLogin('admin@local');
-      onClose();
+    setError('');
+    setLoading(true);
+    
+    if (!email.includes('@')) {
+      setError('Email invalide');
+      setLoading(false);
       return;
     }
-    setError('Identifiants invalides');
+    
+    if (!password) {
+      setError('Mot de passe requis');
+      setLoading(false);
+      return;
+    }
+    
+    try {
+      const API_BASE = (import.meta.env && (import.meta.env.VITE_API_BASE as string)) || 'http://localhost:3005';
+      const res = await fetch(`${API_BASE}/api/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        setError(j.error || 'Identifiants invalides');
+        setLoading(false);
+        return;
+      }
+      
+      const user = await res.json();
+      onLogin(user);
+      onClose();
+    } catch (e) {
+      setError('Erreur de connexion');
+      setLoading(false);
+    }
   };
 
   return (
@@ -979,18 +1189,32 @@ const AdminLoginModal = ({ isOpen, onClose, onLogin }: { isOpen: boolean, onClos
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label className="text-xs text-gray-400 block mb-1">Utilisateur</label>
-            <input value={username} onChange={e => setUsername(e.target.value)} className="w-full bg-black/30 border border-white/10 rounded p-2 text-white" />
+            <label className="text-xs text-gray-400 block mb-1">Email</label>
+            <input 
+              type="email"
+              value={email} 
+              onChange={e => setEmail(e.target.value)} 
+              placeholder="admin@digikoder.local"
+              className="w-full bg-black/30 border border-white/10 rounded p-2 text-white"
+              disabled={loading}
+            />
           </div>
           <div>
             <label className="text-xs text-gray-400 block mb-1">Mot de passe</label>
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full bg-black/30 border border-white/10 rounded p-2 text-white" />
+            <input 
+              type="password"
+              value={password} 
+              onChange={e => setPassword(e.target.value)} 
+              className="w-full bg-black/30 border border-white/10 rounded p-2 text-white"
+              disabled={loading}
+            />
           </div>
           {error && <div className="text-red-400 text-sm">{error}</div>}
-          <button type="submit" className="w-full bg-purple-600 hover:bg-purple-500 text-white py-2 rounded">Se connecter</button>
+          <button type="submit" disabled={loading} className="w-full bg-purple-600 hover:bg-purple-500 disabled:bg-purple-800 text-white py-2 rounded">
+            {loading ? 'Connexion...' : 'Se connecter'}
+          </button>
         </form>
-        <div className="mt-3 text-xs text-gray-400">Identifiants par défaut: <strong>admin</strong> / <strong>admin123</strong></div>
-      </div>
+       </div>
     </div>
   );
 };
@@ -1048,17 +1272,196 @@ const EditContentModal = ({ isOpen, item, onClose, onSave }: { isOpen: boolean, 
   );
 };
 
+// Users Management Modal (superadmin only)
+interface UserItem {
+  id: string;
+  email: string;
+  role: string;
+  created_at: string;
+}
+
+const UsersModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) => {
+  const [users, setUsers] = useState<UserItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newUser, setNewUser] = useState({ email: '', password: '', role: 'admin' });
+  const [error, setError] = useState('');
+
+  const API_BASE = (import.meta.env && (import.meta.env.VITE_API_BASE as string)) || 'http://localhost:3005';
+
+  useEffect(() => {
+    if (isOpen) loadUsers();
+  }, [isOpen]);
+
+  const loadUsers = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/users`);
+      if (res.ok) {
+        const data = await res.json();
+        setUsers(data);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    
+    if (!newUser.email || !newUser.password) {
+      setError('Email et mot de passe requis');
+      return;
+    }
+    
+    try {
+      const res = await fetch(`${API_BASE}/api/users`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newUser)
+      });
+      
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        setError(j.error || 'Erreur lors de la création');
+        return;
+      }
+      
+      setNewUser({ email: '', password: '', role: 'admin' });
+      setShowAddForm(false);
+      loadUsers();
+    } catch (e) {
+      setError('Erreur réseau');
+    }
+  };
+
+  const handleDeleteUser = async (id: string) => {
+    if (!confirm('Supprimer cet utilisateur ?')) return;
+    
+    try {
+      const res = await fetch(`${API_BASE}/api/users/${id}`, { method: 'DELETE' });
+      if (res.ok) loadUsers();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[240] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/70" onClick={onClose}></div>
+      <div className="glass-panel w-full max-w-3xl rounded-xl p-6 relative z-10 border border-white/20 max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-xl font-bold">Gestion des Utilisateurs</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-white">Fermer</button>
+        </div>
+
+        <div className="mb-6">
+          <button 
+            onClick={() => setShowAddForm(!showAddForm)} 
+            className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded flex items-center gap-2"
+          >
+            <Plus size={18} /> Ajouter un utilisateur
+          </button>
+        </div>
+
+        {showAddForm && (
+          <div className="mb-6 p-4 bg-black/30 rounded-lg border border-white/10">
+            <h4 className="text-sm font-bold mb-3">Nouvel utilisateur</h4>
+            <form onSubmit={handleAddUser} className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">Email</label>
+                  <input 
+                    type="email"
+                    value={newUser.email}
+                    onChange={e => setNewUser({...newUser, email: e.target.value})}
+                    className="w-full bg-black/40 border border-white/10 rounded p-2 text-white text-sm"
+                    placeholder="utilisateur@email.com"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">Mot de passe</label>
+                  <input 
+                    type="password"
+                    value={newUser.password}
+                    onChange={e => setNewUser({...newUser, password: e.target.value})}
+                    className="w-full bg-black/40 border border-white/10 rounded p-2 text-white text-sm"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Rôle</label>
+                <select 
+                  value={newUser.role}
+                  onChange={e => setNewUser({...newUser, role: e.target.value})}
+                  className="w-full bg-black/40 border border-white/10 rounded p-2 text-white text-sm"
+                >
+                  <option value="admin">Admin (peut ajouter/modifier son contenu)</option>
+                  <option value="superadmin">Super Admin (accès complet)</option>
+                </select>
+              </div>
+              {error && <div className="text-red-400 text-sm">{error}</div>}
+              <div className="flex gap-2">
+                <button type="submit" className="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded text-sm">
+                  Créer
+                </button>
+                <button type="button" onClick={() => { setShowAddForm(false); setError(''); }} className="bg-gray-600 hover:bg-gray-500 text-white px-4 py-2 rounded text-sm">
+                  Annuler
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {loading ? (
+          <div className="text-center text-gray-400 py-8">Chargement...</div>
+        ) : (
+          <div className="space-y-2">
+            {users.length === 0 ? (
+              <div className="text-center text-gray-400 py-8">Aucun utilisateur</div>
+            ) : (
+              users.map(user => (
+                <div key={user.id} className="flex justify-between items-center p-3 bg-black/20 rounded border border-white/5">
+                  <div>
+                    <div className="font-medium">{user.email}</div>
+                    <div className="text-xs text-gray-400">
+                      {user.role === 'superadmin' ? '👑 Super Admin' : '👤 Admin'} • Créé le {new Date(user.created_at).toLocaleDateString()}
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => handleDeleteUser(user.id)}
+                    className="text-xs bg-red-600 hover:bg-red-500 px-3 py-1 rounded text-white"
+                  >
+                    Supprimer
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // --- MAIN APP ---
 
 const App = () => {
   // Démarrer en mode invité authentifié pour éviter l'écran d'inscription
   const [user, setUser] = useState<User>({ email: 'guest@local', isAuthenticated: true, role: 'user' });
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+  const [isUsersModalOpen, setIsUsersModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<ContentItem | null>(null);
-  const [items, setItems] = useState<ContentItem[]>(INITIAL_DATA);
+  const [items, setItems] = useState<ContentItem[]>([]);
   const [activeFilter, setActiveFilter] = useState<Category | 'all'>('all');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [addContentType, setAddContentType] = useState<'video' | 'note' | null>(null);
   const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
   const [modalVideo, setModalVideo] = useState<{url?: string, platform?: string, title?: string}>({});
   const [aliveMap, setAliveMap] = useState<Record<string, boolean>>({});
@@ -1074,14 +1477,27 @@ const App = () => {
 
   // View mode: show videos mosaic or notes (articles)
   const [viewMode, setViewMode] = useState<'videos' | 'notes'>('videos');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const displayedItems = useMemo(() => {
     if (viewMode === 'notes') {
       return filteredItems.filter(i => i.type === 'article');
     }
     // videos mode: only video items and alive (not explicitly false)
-    return filteredItems.filter(i => i.type === 'video' && aliveMap[i.id] !== false);
+    const base = filteredItems.filter(i => i.type === 'video' && aliveMap[i.id] !== false);
+    if (!searchQuery) return base;
+    const q = searchQuery.toLowerCase();
+    return base.filter(it => {
+      if (it.title.toLowerCase().includes(q)) return true;
+      if ((it.description || '').toLowerCase().includes(q)) return true;
+      if ((it.keywords || []).some(k => k.toLowerCase().includes(q))) return true;
+      return false;
+    });
   }, [filteredItems, viewMode, aliveMap]);
+
+  // API base (use Vite env `VITE_API_BASE` if provided)
+  // Default to 3005 (server/index.cjs) to avoid port conflicts
+  const API_BASE = (import.meta.env && (import.meta.env.VITE_API_BASE as string)) || 'http://localhost:3005';
 
   // Handlers
   const handleLogin = (email: string) => {
@@ -1089,35 +1505,77 @@ const App = () => {
   };
 
   const handleLogout = () => {
-    setUser({ email: '', isAuthenticated: false });
+    // return to guest mosaic view on logout
+    setUser({ email: 'guest@local', isAuthenticated: true, role: 'user' });
+    setViewMode('videos');
+    setActiveFilter('all');
   };
 
   const handleAddContent = (data: any) => {
      const platform = getPlatform(data.url);
      const type = data.category === 'article' ? 'article' : 'video';
-     
-     const newItem: ContentItem = {
-         id: Date.now().toString(),
-         type,
-         platform,
-         title: data.title,
-         url: data.url,
-         category: data.category,
-         description: data.description,
-         addedBy: user.email.split('@')[0], // just take the name part
-         date: new Date().toLocaleDateString()
-     };
-     
-     setItems([newItem, ...items]);
+     (async () => {
+       try {
+         const keywords = extractKeywords((data.title || '') + ' ' + (data.description || ''));
+         const payload: any = { 
+           title: data.title, 
+           url: data.url, 
+           type, 
+           platform, 
+           category: data.category, 
+           description: data.description, 
+           keywords,
+           owner: user.email // Track qui a ajouté le contenu
+         };
+         const res = await fetch(`${API_BASE}/api/contents`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+         if (!res.ok) throw new Error('Erreur API');
+         const inserted = await res.json();
+         const newItem: ContentItem = {
+           id: String(inserted.id),
+           type: inserted.type,
+           platform: inserted.platform || getPlatform(inserted.url),
+           title: inserted.title,
+           url: inserted.url,
+           category: inserted.category || 'outils',
+           description: inserted.description || '',
+           addedBy: inserted.addedBy || user.email,
+           date: inserted.date || ''
+         };
+         setItems(prev => [newItem, ...prev]);
+       } catch (e) {
+         console.error(e);
+         alert('Erreur lors de l\'ajout du contenu');
+       }
+     })();
   };
 
-  const handleAdminLogin = (email: string) => {
-    // set admin role
-    setUser({ email, isAuthenticated: true, role: 'admin' });
+  const handleAdminLogin = (userData: any) => {
+    // Le modal a déjà authentifié l'utilisateur, on set juste le state
+    setUser({ 
+      id: String(userData.id), 
+      email: userData.email, 
+      isAuthenticated: true, 
+      role: userData.role || 'user' 
+    });
   };
 
   const handleEditContent = (updated: ContentItem) => {
-    setItems(items.map(i => i.id === updated.id ? {...i, ...updated} : i));
+    // update in supabase then local state
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/contents/${updated.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
+        if (!res.ok) throw new Error('API error');
+        const row = await res.json();
+        setItems(items.map(i => i.id === updated.id ? {...i, ...{
+          title: row.title,
+          url: row.url,
+          description: row.description,
+          category: row.category,
+          platform: row.platform,
+          keywords: row.keywords
+        }} : i));
+      } catch (e) { console.error(e); }
+    })();
   };
 
   const handleStartEdit = (item: ContentItem) => {
@@ -1127,37 +1585,131 @@ const App = () => {
 
   const handleDeleteContent = (id: string) => {
     if (!confirm('Supprimer définitivement cet élément ?')) return;
-    setItems(items.filter(i => i.id !== id));
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/contents/${id}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error('API error');
+        setItems(items.filter(i => i.id !== id));
+      } catch (e) { console.error(e); }
+    })();
   };
 
-  // On mount (and when items change) check which urls are alive and update aliveMap.
+  // On mount: load contents from local API
   useEffect(() => {
     let cancelled = false;
-    const checkAll = async () => {
-      const map: Record<string, boolean> = { ...aliveMap };
-      for (const it of items) {
-        // skip if we already know it's alive
-        if (map[it.id] === true) continue;
-        try {
-          const ok = await checkUrlAlive(it.url, 5000);
-          if (cancelled) return;
-          map[it.id] = ok;
-          // update progressively for responsiveness
-          setAliveMap({ ...map });
-        } catch (e) {
-          map[it.id] = false;
-          setAliveMap({ ...map });
+    const load = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/contents`);
+        if (!res.ok) {
+          console.warn('API load error', res.statusText);
+          return;
         }
+        const data = await res.json();
+        if (cancelled) return;
+        setItems(data as ContentItem[]);
+      } catch (e) {
+        console.error(e);
       }
     };
-    checkAll();
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Check video URL validity on mount and when items change
+  useEffect(() => {
+    let cancelled = false;
+    const checkVideos = async () => {
+      const videoItems = items.filter(i => i.type === 'video');
+      const newAliveMap: Record<string, boolean> = {};
+      
+      for (const item of videoItems) {
+        if (cancelled) return;
+        // Skip if already checked
+        if (aliveMap[item.id] !== undefined) {
+          newAliveMap[item.id] = aliveMap[item.id];
+          continue;
+        }
+        
+        // Facebook bloque les requêtes CORS - toujours considérer comme valide
+        if (item.platform === 'facebook') {
+          newAliveMap[item.id] = true;
+          continue;
+        }
+        
+        try {
+          const isAlive = await checkUrlAlive(item.url, 8000);
+          if (!cancelled) {
+            newAliveMap[item.id] = isAlive;
+          }
+        } catch (e) {
+          if (!cancelled) {
+            newAliveMap[item.id] = false;
+          }
+        }
+      }
+      
+      if (!cancelled && Object.keys(newAliveMap).length > 0) {
+        setAliveMap(prev => ({ ...prev, ...newAliveMap }));
+      }
+    };
+    
+    if (items.length > 0) {
+      checkVideos();
+    }
+    
+    return () => { cancelled = true; };
+  }, [items]);
+
+  // Fetch missing/placeholder titles (uses backend to avoid CORS)
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchTitleFor = async (url: string) => {
+      try {
+        // Use backend to fetch title (avoids CORS)
+        const response = await fetch('http://localhost:3005/api/fetch-title', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.title) return data.title;
+        }
+      } catch (e) {
+        console.error('fetch-title error:', e);
+      }
+
+      return null;
+    };
+
+    const run = async () => {
+      const updated: ContentItem[] = [...items];
+      let changed = false;
+      for (let i = 0; i < updated.length; i++) {
+        if (cancelled) return;
+        const it = updated[i];
+        const needs = typeof it.title === 'string' && (it.title.startsWith('Imported:') || it.title.match(/^yt-|^Imported:/));
+        if (needs) {
+          const t = await fetchTitleFor(it.url);
+          if (t) {
+            updated[i] = { ...it, title: t };
+            changed = true;
+            setItems(prev => prev.map(p => p.id === it.id ? { ...p, title: t } : p));
+          }
+        }
+      }
+      return changed;
+    };
+
+    run();
+
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items]);
 
-  if (!user.isAuthenticated) {
-    return <AuthScreen onLogin={handleLogin} />;
-  }
+  // always show mosaic; auth screen removed per request
 
   return (
     <div className="min-h-screen pb-20 relative">
@@ -1174,9 +1726,30 @@ const App = () => {
         onFilterChange={setActiveFilter}
         onOpenAdd={() => setIsAddModalOpen(true)}
         onOpenAdmin={() => setIsAdminModalOpen(true)}
+        onOpenUsers={() => setIsUsersModalOpen(true)}
+        searchQuery={searchQuery}
+        onSearchChange={(v: string) => setSearchQuery(v)}
       />
 
       <main className="max-w-7xl mx-auto px-4">
+        {/* Quick Add Buttons (visible only for authenticated users) */}
+        {user.role !== 'user' && (
+          <div className="mb-8 flex gap-3 flex-wrap">
+            <button 
+              onClick={() => { setAddContentType('video'); setIsAddModalOpen(true); }}
+              className="bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white px-6 py-3 rounded-lg font-semibold flex items-center gap-2 shadow-lg shadow-red-600/30 transition-all"
+            >
+              <Video size={20} /> Ajouter une vidéo
+            </button>
+            <button 
+              onClick={() => { setAddContentType('note'); setIsAddModalOpen(true); }}
+              className="bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white px-6 py-3 rounded-lg font-semibold flex items-center gap-2 shadow-lg shadow-blue-600/30 transition-all"
+            >
+              <BookOpen size={20} /> Ajouter une note
+            </button>
+          </div>
+        )}
+
         <div className="flex items-center gap-3 mb-6">
           <button onClick={() => setViewMode('videos')} className={`px-4 py-2 rounded-full text-sm ${viewMode === 'videos' ? 'bg-purple-600 text-white' : 'bg-white/5 text-gray-300'}`}>
             Vidéos <span className="ml-2 text-xs text-gray-200">({filteredItems.filter(i => i.type === 'video' && aliveMap[i.id] !== false).length})</span>
@@ -1193,14 +1766,18 @@ const App = () => {
       <NoteModal isOpen={isNoteModalOpen} onClose={() => { setIsNoteModalOpen(false); setModalNote(null); }} note={modalNote} />
 
       <AdminLoginModal isOpen={isAdminModalOpen} onClose={() => setIsAdminModalOpen(false)} onLogin={handleAdminLogin} />
+      <UsersModal isOpen={isUsersModalOpen} onClose={() => setIsUsersModalOpen(false)} />
       <EditContentModal isOpen={isEditModalOpen} item={editingItem} onClose={() => { setIsEditModalOpen(false); setEditingItem(null); }} onSave={(u) => handleEditContent(u)} />
 
       <AddContentModal 
         isOpen={isAddModalOpen} 
-        onClose={() => setIsAddModalOpen(false)} 
+        onClose={() => {
+            setIsAddModalOpen(false);
+            setAddContentType(null);
+        }} 
         onAdd={handleAddContent}
+        contentType={addContentType}
       />
-
     </div>
   );
 };
