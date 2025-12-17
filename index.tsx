@@ -1,27 +1,50 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
-  Play, 
-  BookOpen, 
-  Music, 
-  Video, 
-  Plus, 
-  Search, 
-  LogOut, 
-  Lock, 
-  Youtube, 
-  Facebook, 
-  Instagram, 
+  Play,
+  BookOpen,
+  Music,
+  Video,
+  Plus,
+  Search,
+  LogOut,
+  Lock,
+  Youtube,
+  Facebook,
+  Instagram,
   Link as LinkIcon,
   Filter,
-  ShieldCheck
+  ShieldCheck,
+  Sparkles,
+  Film,
+  TrendingUp,
+  Heart,
+  Star,
+  Headphones,
+  Mic,
+  Radio,
+  Disc,
+  Target,
+  Zap,
+  Award,
+  Compass,
+  Globe,
+  Sun
 } from 'lucide-react';
 // Using local Express+SQLite API instead of Supabase
 
-// Déclaration pour le Facebook SDK
+// Loading fallback component
+const LoadingSpinner = () => (
+  <div className="flex items-center justify-center p-8">
+    <div className="w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+  </div>
+);
+
+// Déclaration pour le Facebook SDK et Instagram
 declare global {
   interface Window {
     FB: any;
+    instgrm: any;
   }
 }
 
@@ -460,9 +483,35 @@ const extractKeywords = (text: string, maxKeywords = 6) => {
   return sorted.slice(0, maxKeywords);
 };
 
-// Best-effort URL alive check. Uses noembed for known providers, falls back to HEAD fetch.
+// Best-effort URL alive check. Uses YouTube oEmbed for YouTube, backend validation for others.
 const checkUrlAlive = async (url: string, timeoutMs = 5000): Promise<boolean> => {
-  // try noembed first (works for many providers)
+  const API_BASE = (import.meta.env && (import.meta.env.VITE_API_BASE as string)) || 'http://localhost:3005';
+
+  // For YouTube, use the official oEmbed API (very reliable)
+  if (url.includes('youtube.com') || url.includes('youtu.be')) {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
+      const res = await fetch(oembedUrl, { signal: controller.signal });
+      clearTimeout(id);
+      if (res.ok) {
+        const json = await res.json().catch(() => null);
+        // If oEmbed returns data, video exists and is accessible
+        if (json && json.title) return true;
+      }
+      // If oEmbed fails (404), video is deleted/private/unavailable
+      if (res.status === 404 || res.status === 401 || res.status === 403) {
+        return false;
+      }
+    } catch (e) {
+      clearTimeout(id);
+      // Network error - assume alive to prevent false negatives
+      return true;
+    }
+  }
+
+  // For other platforms, try noembed first
   const noembed = `https://noembed.com/embed?url=${encodeURIComponent(url)}`;
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
@@ -474,16 +523,16 @@ const checkUrlAlive = async (url: string, timeoutMs = 5000): Promise<boolean> =>
       if (json && (json.title || json.html)) return true;
     }
   } catch (e) {
-    // fall through to HEAD
+    // fall through to backend validation
   } finally {
     clearTimeout(id);
   }
 
-  // Fallback: use backend to check URL (avoids CORS)
+  // Fallback: use backend validation endpoint (avoids CORS and better error handling)
   const controller2 = new AbortController();
   const id2 = setTimeout(() => controller2.abort(), timeoutMs);
   try {
-    const res2 = await fetch('http://localhost:3005/api/check-url', {
+    const res2 = await fetch(`${API_BASE}/api/validate-url`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url }),
@@ -492,28 +541,57 @@ const checkUrlAlive = async (url: string, timeoutMs = 5000): Promise<boolean> =>
     clearTimeout(id2);
     if (res2 && res2.ok) {
       const data = await res2.json();
-      return data.ok || data.status === 0;
+      // alive can be: true (alive), false (dead), null (unknown/timeout)
+      // If null or undefined, assume alive to avoid false negatives
+      return data.alive !== false;
     }
   } catch (e) {
-    // final fallback: consider dead
+    // Network error - assume alive to prevent false negatives
   } finally {
     clearTimeout(id2);
   }
 
-  return false;
+  // Default to true (assume alive) to minimize false negatives
+  return true;
 };
 
 // --- COMPONENTS ---
 
-const Header = ({ user, onLogout, activeFilter, onFilterChange, onOpenAdd, onOpenAdmin, onOpenUsers, searchQuery, onSearchChange }: any) => {
-  const categories: {id: Category | 'all', label: string, icon: any}[] = [
-    { id: 'all', label: 'Tout', icon: Filter },
-    { id: 'musique', label: 'Fréquences & Musique', icon: Music },
-    { id: 'meditation', label: 'Méditation', icon: Play },
-    { id: 'documentaire', label: 'Savoir & Docu', icon: Video },
-    { id: 'article', label: 'Notes & Blog', icon: BookOpen },
-    { id: 'outils', label: 'Outils Pratiques', icon: ShieldCheck },
-  ];
+const Header = ({ user, onLogout, activeFilter, onFilterChange, onOpenAdd, onOpenAdmin, onOpenUsers, onOpenSettings, onOpenCategories, searchQuery, onSearchChange }: any) => {
+  const [categories, setCategories] = useState<{id: Category | 'all', label: string, icon: any}[]>([
+    { id: 'all', label: 'Tout', icon: Filter }
+  ]);
+
+  const API_BASE = (import.meta.env && (import.meta.env.VITE_API_BASE as string)) || 'http://localhost:3005';
+
+  // Icon mapping
+  const iconMap: Record<string, any> = {
+    Music, Play, Sparkles, Film, TrendingUp, Heart, Star, BookOpen,
+    Headphones, Mic, Radio, Disc, Target, Zap, Award, Compass, Globe, Sun, Video, ShieldCheck, Filter
+  };
+
+  useEffect(() => {
+    const loadCategories = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/categories`);
+        if (res.ok) {
+          const data = await res.json();
+          const mappedCategories = data.map((cat: any) => ({
+            id: cat.id,
+            label: cat.label,
+            icon: iconMap[cat.icon] || Filter
+          }));
+          setCategories([
+            { id: 'all', label: 'Tout', icon: Filter },
+            ...mappedCategories
+          ]);
+        }
+      } catch (e) {
+        console.error('Error loading categories:', e);
+      }
+    };
+    loadCategories();
+  }, []);
 
   return (
     <header className="sticky top-0 z-50 glass-panel border-b border-white/10 shadow-lg mb-8">
@@ -536,13 +614,25 @@ const Header = ({ user, onLogout, activeFilter, onFilterChange, onOpenAdd, onOpe
               <>
                 {user.role === 'superadmin' && (
                   <>
-                    <button 
+                    <button
                       onClick={onOpenUsers}
                       className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-full font-semibold transition-all flex items-center gap-2 text-sm"
                     >
                       👥 Utilisateurs
                     </button>
-                    <button 
+                    <button
+                      onClick={onOpenCategories}
+                      className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-full font-semibold transition-all flex items-center gap-2 text-sm"
+                    >
+                      📂 Catégories
+                    </button>
+                    <button
+                      onClick={onOpenSettings}
+                      className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-full font-semibold transition-all flex items-center gap-2 text-sm"
+                    >
+                      ⚙️ Paramètres
+                    </button>
+                    <button
                       onClick={onOpenAdd}
                       className="bg-amber-400 hover:bg-amber-300 text-black px-4 py-2 rounded-full font-semibold transition-all shadow-[0_0_15px_rgba(251,191,36,0.3)] flex items-center gap-2 text-sm"
                     >
@@ -601,16 +691,26 @@ const Header = ({ user, onLogout, activeFilter, onFilterChange, onOpenAdd, onOpe
   );
 };
 
-const VideoEmbed = ({ url, platform, title }: { url: string, platform: string, title: string }) => {
+const VideoEmbed = ({ url, platform, title, thumbnail }: { url: string, platform: string, title: string, thumbnail?: string }) => {
   // Always render a visual thumbnail/card in the mosaic. Playback happens in modal only.
   const videoId = platform === 'youtube' ? getYoutubeId(url) : null;
-  const thumbnail = videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : null;
+  const defaultThumbnail = videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : null;
+
+  // Use provided thumbnail (for Instagram/Facebook) or default YouTube thumbnail
+  const finalThumbnail = thumbnail || defaultThumbnail;
+
+  const [imageError, setImageError] = React.useState(false);
 
   return (
     <div className="relative rounded-lg overflow-hidden group bg-black/20">
-      {thumbnail ? (
+      {finalThumbnail && !imageError ? (
         <div className="relative">
-          <img src={thumbnail} alt={title} className="w-full h-auto block object-cover" />
+          <img
+            src={finalThumbnail}
+            alt={title}
+            className="w-full h-auto block object-cover"
+            onError={() => setImageError(true)}
+          />
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="w-16 h-16 rounded-full bg-black/50 flex items-center justify-center border border-white/10">
               <Play className="text-white" />
@@ -630,18 +730,58 @@ const VideoEmbed = ({ url, platform, title }: { url: string, platform: string, t
   );
 };
 
-const ContentCard: React.FC<{ item: ContentItem, user?: User, onOpenVideo?: (u: string, p: string, t?: string) => void, onOpenNote?: (item: ContentItem) => void, onEdit?: (item: ContentItem) => void, onDelete?: (id: string) => void }> = ({ item, user, onOpenVideo, onOpenNote, onEdit, onDelete }) => {
+const ContentCard: React.FC<{ item: ContentItem, user?: User, onOpenVideo?: (u: string, p: string, t?: string) => void, onOpenNote?: (item: ContentItem) => void, onEdit?: (item: ContentItem) => void, onDelete?: (id: string) => void, thumbnail?: string, getCategoryLabel?: (id: string) => string }> = ({ item, user, onOpenVideo, onOpenNote, onEdit, onDelete, thumbnail, getCategoryLabel }) => {
+  // Color palette for categories
+  const colorPalette = [
+    { border: 'border-red-500/50', text: 'text-red-300', bg: 'bg-red-500/10' },
+    { border: 'border-orange-500/50', text: 'text-orange-300', bg: 'bg-orange-500/10' },
+    { border: 'border-yellow-500/50', text: 'text-yellow-300', bg: 'bg-yellow-500/10' },
+    { border: 'border-green-500/50', text: 'text-green-300', bg: 'bg-green-500/10' },
+    { border: 'border-cyan-500/50', text: 'text-cyan-300', bg: 'bg-cyan-500/10' },
+    { border: 'border-blue-500/50', text: 'text-blue-300', bg: 'bg-blue-500/10' },
+    { border: 'border-purple-500/50', text: 'text-purple-300', bg: 'bg-purple-500/10' },
+    { border: 'border-pink-500/50', text: 'text-pink-300', bg: 'bg-pink-500/10' },
+    { border: 'border-teal-500/50', text: 'text-teal-300', bg: 'bg-teal-500/10' },
+    { border: 'border-indigo-500/50', text: 'text-indigo-300', bg: 'bg-indigo-500/10' },
+    { border: 'border-rose-500/50', text: 'text-rose-300', bg: 'bg-rose-500/10' },
+    { border: 'border-amber-500/50', text: 'text-amber-300', bg: 'bg-amber-500/10' },
+  ];
+
+  // Generate stable hash for category ID to determine color
+  const getCategoryColor = (categoryId: string) => {
+    let hash = 0;
+    for (let i = 0; i < categoryId.length; i++) {
+      const char = categoryId.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    const colorIndex = Math.abs(hash) % colorPalette.length;
+    return colorPalette[colorIndex];
+  };
+
+  const categoryColor = getCategoryColor(item.category);
   const isVideo = item.type === 'video';
-  
+
   // Permissions: superadmin peut tout éditer, admin peut éditer seulement son propre contenu
   const canEdit = user?.role === 'superadmin' || (user?.role === 'admin' && item.addedBy === user.email);
 
+  // Pour Instagram, ouvrir directement dans un nouvel onglet (pas de modal)
+  const handleCardClick = () => {
+    if (item.platform === 'instagram' && isVideo) {
+      window.open(item.url, '_blank', 'noopener,noreferrer');
+    } else if (isVideo) {
+      onOpenVideo?.(item.url, item.platform || 'other', item.title);
+    } else {
+      onOpenNote?.(item);
+    }
+  };
+
   return (
-    <div onClick={() => { if (isVideo) onOpenVideo?.(item.url, item.platform || 'other', item.title); else onOpenNote?.(item); }} className="break-inside-avoid mb-6 glass-panel rounded-xl overflow-hidden hover:translate-y-[-2px] transition-transform duration-300 group cursor-pointer">
+    <div onClick={handleCardClick} className="break-inside-avoid mb-6 glass-panel rounded-xl overflow-hidden hover:translate-y-[-2px] transition-transform duration-300 group cursor-pointer">
       {/* Media Area */}
       {isVideo ? (
         <div className="p-2 pb-0">
-            <VideoEmbed url={item.url} platform={item.platform || 'other'} title={item.title} onOpen={onOpenVideo} />
+            <VideoEmbed url={item.url} platform={item.platform || 'other'} title={item.title} thumbnail={thumbnail} onOpen={onOpenVideo} />
         </div>
       ) : (
         <div className="h-32 bg-gradient-to-br from-indigo-900 via-purple-900 to-black p-6 flex flex-col justify-center relative overflow-hidden">
@@ -654,13 +794,8 @@ const ContentCard: React.FC<{ item: ContentItem, user?: User, onOpenVideo?: (u: 
       {/* Content Area */}
       <div className="p-4">
         <div className="flex justify-between items-start gap-2 mb-2">
-           <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded border ${
-               item.category === 'musique' ? 'border-teal-500/50 text-teal-300 bg-teal-500/10' :
-               item.category === 'meditation' ? 'border-purple-500/50 text-purple-300 bg-purple-500/10' :
-               item.category === 'documentaire' ? 'border-blue-500/50 text-blue-300 bg-blue-500/10' :
-               'border-amber-500/50 text-amber-300 bg-amber-500/10'
-           }`}>
-             {item.category}
+           <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded border ${categoryColor.border} ${categoryColor.text} ${categoryColor.bg}`}>
+             {getCategoryLabel ? getCategoryLabel(item.category) : item.category}
            </span>
            <div className="flex gap-2">
                   {item.platform === 'youtube' && <Youtube size={14} className="text-red-400" />}
@@ -676,15 +811,7 @@ const ContentCard: React.FC<{ item: ContentItem, user?: User, onOpenVideo?: (u: 
         </div>
         
         <h3 className="font-serif font-bold text-lg leading-tight mb-2 text-gray-100 group-hover:text-amber-200 transition-colors">
-          {item.type === 'video' ? (
-            <button onClick={() => onOpenVideo?.(item.url, item.platform || 'other', item.title)} className="text-left w-full text-inherit">
-              {item.title}
-            </button>
-          ) : (
-            <button onClick={() => onOpenNote?.(item)} className="text-left w-full text-inherit">
-              {item.title}
-            </button>
-          )}
+          {item.title}
         </h3>
         
         {item.description && (
@@ -702,10 +829,16 @@ const ContentCard: React.FC<{ item: ContentItem, user?: User, onOpenVideo?: (u: 
   );
 };
 
-const MasonryGrid = ({ items, user, onOpenVideo, onOpenNote, onEdit, onDelete }: { items: ContentItem[], user?: User, onOpenVideo?: (u: string, p: string, t?: string) => void, onOpenNote?: (item: ContentItem) => void, onEdit?: (item: ContentItem) => void, onDelete?: (id: string) => void }) => {
+const MasonryGrid = ({ items, user, onOpenVideo, onOpenNote, onEdit, onDelete, thumbnailMap, categories }: { items: ContentItem[], user?: User, onOpenVideo?: (u: string, p: string, t?: string) => void, onOpenNote?: (item: ContentItem) => void, onEdit?: (item: ContentItem) => void, onDelete?: (id: string) => void, thumbnailMap?: Record<string, string>, categories?: Array<{id: string, label: string, icon: string}> }) => {
   // Simple CSS Column masonry implementation
   // We use columns-1 for mobile, columns-2 for tablet, columns-3/4 for desktop
-  
+
+  // Helper function to get category label by ID
+  const getCategoryLabel = (categoryId: string): string => {
+    const cat = categories?.find(c => c.id === categoryId);
+    return cat?.label || categoryId; // Fallback to ID if not found
+  };
+
   if (items.length === 0) {
       return (
           <div className="flex flex-col items-center justify-center py-20 text-gray-500">
@@ -720,7 +853,17 @@ const MasonryGrid = ({ items, user, onOpenVideo, onOpenNote, onEdit, onDelete }:
   return (
     <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-6 space-y-6">
       {items.map(item => (
-        <ContentCard key={item.id} item={item} user={user} onOpenVideo={onOpenVideo} onOpenNote={onOpenNote} onEdit={onEdit} onDelete={onDelete} />
+        <ContentCard
+          key={item.id}
+          item={item}
+          user={user}
+          onOpenVideo={onOpenVideo}
+          onOpenNote={onOpenNote}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          thumbnail={thumbnailMap?.[item.id]}
+          getCategoryLabel={getCategoryLabel}
+        />
       ))}
     </div>
   );
@@ -784,14 +927,99 @@ const AddContentModal = ({ isOpen, onClose, onAdd, contentType }: any) => {
       description: '',
       captcha: ''
   });
-  
+
+  const [isFetchingMetadata, setIsFetchingMetadata] = useState(false);
+  const [metadataError, setMetadataError] = useState<string | null>(null);
+  const [hasAutoFetched, setHasAutoFetched] = useState(false);
+  const [categories, setCategories] = useState<Array<{id: string, label: string, icon: string}>>([]);
+
   // Simple captcha
   const [captchaNum] = useState({ a: Math.floor(Math.random()*10), b: Math.floor(Math.random()*10) });
 
-  if (!isOpen) return null;
+  const API_BASE = (import.meta.env && (import.meta.env.VITE_API_BASE as string)) || 'http://localhost:3005';
+
+  // Load categories when modal opens
+  React.useEffect(() => {
+    if (isOpen) {
+      fetch(`${API_BASE}/api/categories`)
+        .then(res => res.ok ? res.json() : [])
+        .then(data => {
+          setCategories(data);
+          if (data.length > 0 && !formData.category) {
+            setFormData(prev => ({ ...prev, category: data[0].id }));
+          }
+        })
+        .catch(() => setCategories([]));
+    }
+  }, [isOpen]);
 
   const isVideo = contentType === 'video';
   const isNote = contentType === 'note';
+
+  // Reset hasAutoFetched when modal closes
+  React.useEffect(() => {
+    if (!isOpen) {
+      setHasAutoFetched(false);
+      setFormData({
+        url: '',
+        title: '',
+        category: 'musique',
+        description: '',
+        captcha: ''
+      });
+    }
+  }, [isOpen]);
+
+  // Debounced URL change handler - only fetch once per URL
+  React.useEffect(() => {
+    if (!isOpen || !isVideo || !formData.url || hasAutoFetched) return;
+
+    const timer = setTimeout(() => {
+      // Only fetch for video URLs (YouTube, Facebook, Instagram)
+      const isVideoUrl = formData.url.includes('youtube.com') || formData.url.includes('youtu.be') ||
+                         formData.url.includes('facebook.com') || formData.url.includes('fb.watch') ||
+                         formData.url.includes('instagram.com');
+
+      if (!isVideoUrl || formData.url.length < 10) return;
+
+      setIsFetchingMetadata(true);
+      setMetadataError(null);
+
+      fetch(`${API_BASE}/api/fetch-title`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: formData.url })
+      })
+        .then(response => {
+          if (response.ok) {
+            return response.json();
+          } else {
+            throw new Error('Impossible de récupérer les infos');
+          }
+        })
+        .then(data => {
+          if (data.title) {
+            setFormData(prev => ({ ...prev, title: data.title }));
+            setHasAutoFetched(true);
+          } else {
+            setMetadataError('Titre non trouvé - veuillez le saisir manuellement');
+            setHasAutoFetched(true);
+          }
+        })
+        .catch(e => {
+          console.error('Fetch metadata error:', e);
+          setMetadataError('Erreur réseau - veuillez saisir le titre manuellement');
+          setHasAutoFetched(true);
+        })
+        .finally(() => {
+          setIsFetchingMetadata(false);
+        });
+    }, 800); // Wait 800ms after user stops typing
+
+    return () => clearTimeout(timer);
+  }, [formData.url, isVideo, isOpen, hasAutoFetched, API_BASE]);
+
+  if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
       e.preventDefault();
@@ -851,15 +1079,25 @@ const AddContentModal = ({ isOpen, onClose, onAdd, contentType }: any) => {
                 )}
                 
                 <div className="grid grid-cols-2 gap-4">
-                    <div>
-                         <label className="block text-xs text-gray-400 mb-1">Titre</label>
-                         <input 
+                    <div className="relative">
+                         <label className="block text-xs text-gray-400 mb-1">
+                           Titre
+                           {isFetchingMetadata && (
+                             <span className="ml-2 text-amber-400 animate-pulse">⏳ Récupération...</span>
+                           )}
+                         </label>
+                         <input
                             required
                             type="text"
                             value={formData.title}
                             onChange={e => setFormData({...formData, title: e.target.value})}
                             className="w-full bg-black/40 border border-white/10 rounded p-2 text-white focus:border-purple-400 focus:outline-none"
+                            placeholder={isFetchingMetadata ? "Chargement du titre..." : "Titre de la vidéo"}
+                            disabled={isFetchingMetadata}
                         />
+                        {metadataError && (
+                          <p className="text-xs text-orange-400 mt-1">💡 {metadataError}</p>
+                        )}
                     </div>
                     <div>
                          <label className="block text-xs text-gray-400 mb-1">Catégorie</label>
@@ -868,11 +1106,13 @@ const AddContentModal = ({ isOpen, onClose, onAdd, contentType }: any) => {
                             onChange={e => setFormData({...formData, category: e.target.value})}
                             className="w-full bg-black/40 border border-white/10 rounded p-2 text-white focus:border-purple-400 focus:outline-none appearance-none"
                         >
-                            <option value="musique">Musique / Fréquences</option>
-                            <option value="meditation">Méditation</option>
-                            <option value="documentaire">Documentaire</option>
-                            <option value="article">Article / Note</option>
-                            <option value="outils">Outils</option>
+                            {categories.length > 0 ? (
+                              categories.map(cat => (
+                                <option key={cat.id} value={cat.id}>{cat.label}</option>
+                              ))
+                            ) : (
+                              <option value="musique">Musique / Fréquences</option>
+                            )}
                         </select>
                     </div>
                 </div>
@@ -915,7 +1155,6 @@ const VideoModal = ({ isOpen, onClose, url, platform, title }: { isOpen: boolean
   const [iframeFailed, setIframeFailed] = useState(false);
   const [thumbnail, setThumbnail] = useState<string | undefined>(undefined);
   const [reloadKey, setReloadKey] = useState(0);
-  
 
   const [fbEmbed, setFbEmbed] = useState<{ href?: string, endpoint?: 'post'|'video' } | null>(null);
   const [fbEndpointOverride, setFbEndpointOverride] = useState<'post'|'video'|null>(null);
@@ -1027,6 +1266,62 @@ const VideoModal = ({ isOpen, onClose, url, platform, title }: { isOpen: boolean
     return () => { cancelled = true; };
   }, [url, platform]);
 
+  // Load better thumbnails when modal opens (YouTube and Facebook only)
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadBetterThumbnail = async () => {
+      if (!url || !isOpen) return;
+
+      // YouTube - use high quality thumbnail directly
+      if (platform === 'youtube') {
+        const id = getYoutubeId(url);
+        if (id) {
+          // Try maxresdefault first (best quality)
+          const maxresUrl = `https://i.ytimg.com/vi/${id}/maxresdefault.jpg`;
+          const img = new Image();
+          img.onload = () => {
+            if (!cancelled && img.naturalWidth > 120) {
+              setThumbnail(maxresUrl);
+            } else {
+              setThumbnail(`https://i.ytimg.com/vi/${id}/hqdefault.jpg`);
+            }
+          };
+          img.onerror = () => {
+            if (!cancelled) setThumbnail(`https://i.ytimg.com/vi/${id}/hqdefault.jpg`);
+          };
+          img.src = maxresUrl;
+        }
+        return;
+      }
+
+      // For Facebook, fetch from backend
+      if (platform === 'facebook') {
+        try {
+          const API_BASE = (import.meta.env && (import.meta.env.VITE_API_BASE as string)) || 'http://localhost:3005';
+          const res = await fetch(`${API_BASE}/api/fetch-title`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url })
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            if (!cancelled) {
+              if (data.thumbnail) setThumbnail(data.thumbnail);
+            }
+          }
+        } catch (e) {
+          console.error('Error loading thumbnail:', e);
+        }
+      }
+    };
+
+    loadBetterThumbnail();
+
+    return () => { cancelled = true; };
+  }, [platform, url, isOpen]);
+
 
 
   // Retirer le second timeout générique pour éviter les conflits avec la logique de retry Facebook
@@ -1049,10 +1344,9 @@ const VideoModal = ({ isOpen, onClose, url, platform, title }: { isOpen: boolean
           <div className="text-sm text-gray-200 truncate flex-1">{title || 'Lecture'}</div>
           <div className="flex items-center gap-2 flex-shrink-0 ml-2">
             {platform === 'facebook' && (
-              <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs bg-white/10 hover:bg-white/20 px-3 py-1 rounded text-white whitespace-nowrap">Ouvrir</a>
-            )}
-            {platform === 'instagram' && (
-              <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs bg-white/10 hover:bg-white/20 px-3 py-1 rounded text-white whitespace-nowrap">Ouvrir</a>
+              <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs bg-white/10 hover:bg-white/20 px-3 py-1 rounded text-white whitespace-nowrap">
+                Ouvrir sur Facebook
+              </a>
             )}
             <button onClick={onClose} className="text-gray-300 hover:text-white px-3 flex-shrink-0">✕</button>
           </div>
@@ -1062,16 +1356,16 @@ const VideoModal = ({ isOpen, onClose, url, platform, title }: { isOpen: boolean
           {!iframeFailed ? (
             <div className="absolute top-0 left-0 w-full h-full flex items-center justify-center bg-black overflow-auto">
               <iframe
-                key={reloadKey}
-                onLoad={() => { setIframeLoaded(true); }}
-                className="w-full h-full"
-                src={src}
-                title={title}
-                allow="autoplay; encrypted-media; clipboard-write; picture-in-picture; fullscreen; web-share"
-                sandbox={platform === 'facebook' || platform === 'instagram' ? 'allow-scripts allow-same-origin allow-popups allow-forms allow-storage-access-by-user-activation' : undefined}
-                referrerPolicy="no-referrer-when-downgrade"
-                allowFullScreen
-              ></iframe>
+                  key={reloadKey}
+                  onLoad={() => { setIframeLoaded(true); }}
+                  className="w-full h-full"
+                  src={src}
+                  title={title}
+                  allow="autoplay; encrypted-media; clipboard-write; picture-in-picture; fullscreen; web-share"
+                  sandbox={platform === 'facebook' ? 'allow-scripts allow-same-origin allow-popups allow-forms allow-storage-access-by-user-activation' : undefined}
+                  referrerPolicy="no-referrer-when-downgrade"
+                  allowFullScreen
+                ></iframe>
             </div>
           ) : (
             <div className="w-full h-full flex items-center justify-center p-4">
@@ -1221,10 +1515,21 @@ const AdminLoginModal = ({ isOpen, onClose, onLogin }: { isOpen: boolean, onClos
 
 const EditContentModal = ({ isOpen, item, onClose, onSave }: { isOpen: boolean, item?: ContentItem | null, onClose: () => void, onSave: (updated: ContentItem) => void }) => {
   const [form, setForm] = useState<any>({});
+  const [categories, setCategories] = useState<Array<{id: string, label: string, icon: string}>>([]);
+  const API_BASE = (import.meta.env && (import.meta.env.VITE_API_BASE as string)) || 'http://localhost:3005';
 
   useEffect(() => {
     if (item) setForm({ ...item });
   }, [item]);
+
+  useEffect(() => {
+    if (isOpen) {
+      fetch(`${API_BASE}/api/categories`)
+        .then(res => res.ok ? res.json() : [])
+        .then(data => setCategories(data))
+        .catch(() => setCategories([]));
+    }
+  }, [isOpen]);
 
   if (!isOpen || !item) return null;
 
@@ -1257,12 +1562,14 @@ const EditContentModal = ({ isOpen, item, onClose, onSave }: { isOpen: boolean, 
           </div>
           <div>
             <label className="text-xs text-gray-400 block mb-1">Catégorie</label>
-            <select value={form.category || 'musique'} onChange={e => setForm({...form, category: e.target.value})} className="w-full bg-black/30 border border-white/10 rounded p-2 text-white">
-              <option value="musique">Musique / Fréquences</option>
-              <option value="meditation">Méditation</option>
-              <option value="documentaire">Documentaire</option>
-              <option value="article">Article / Note</option>
-              <option value="outils">Outils</option>
+            <select value={form.category || (categories[0]?.id || 'musique')} onChange={e => setForm({...form, category: e.target.value})} className="w-full bg-black/30 border border-white/10 rounded p-2 text-white">
+              {categories.length > 0 ? (
+                categories.map(cat => (
+                  <option key={cat.id} value={cat.id}>{cat.label}</option>
+                ))
+              ) : (
+                <option value="musique">Musique / Fréquences</option>
+              )}
             </select>
           </div>
           <button type="submit" className="w-full bg-purple-600 hover:bg-purple-500 text-white py-2 rounded">Enregistrer</button>
@@ -1449,6 +1756,450 @@ const UsersModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void 
   );
 };
 
+// Settings Modal (admin/superadmin only)
+const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) => {
+  const [selectedFont, setSelectedFont] = useState('inter');
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+
+  const API_BASE = (import.meta.env && (import.meta.env.VITE_API_BASE as string)) || 'http://localhost:3005';
+
+  const fonts = [
+    { id: 'inter', name: 'Inter (par défaut)', family: 'Inter, sans-serif' },
+    { id: 'indie-flower', name: 'Indie Flower', family: "'Indie Flower', cursive" },
+    { id: 'cherry-swash', name: 'Cherry Swash', family: "'Cherry Swash', cursive" },
+    { id: 'open-sans', name: 'Open Sans', family: "'Open Sans', sans-serif" },
+    { id: 'raleway', name: 'Raleway', family: "'Raleway', sans-serif" },
+    { id: 'playfair', name: 'Playfair Display', family: "'Playfair Display', serif" },
+    { id: 'lato', name: 'Lato', family: "'Lato', sans-serif" },
+    { id: 'merriweather', name: 'Merriweather', family: "'Merriweather', serif" },
+    { id: 'montserrat', name: 'Montserrat', family: "'Montserrat', sans-serif" },
+    { id: 'roboto-slab', name: 'Roboto Slab', family: "'Roboto Slab', serif" },
+    { id: 'dancing', name: 'Dancing Script', family: "'Dancing Script', cursive" }
+  ];
+
+  useEffect(() => {
+    if (isOpen) loadSettings();
+  }, [isOpen]);
+
+  const loadSettings = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/settings`);
+      if (res.ok) {
+        const data = await res.json();
+        setSelectedFont(data.selectedFont || 'inter');
+      }
+    } catch (e) {
+      console.error('Error loading settings:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    setMessage('');
+
+    try {
+      const token = localStorage.getItem('authToken');
+      const res = await fetch(`${API_BASE}/api/settings`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ selectedFont })
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setMessage(data.error || 'Erreur lors de la sauvegarde');
+        return;
+      }
+
+      setMessage('Paramètres sauvegardés avec succès !');
+
+      // Apply font globally
+      document.body.style.fontFamily = fonts.find(f => f.id === selectedFont)?.family || 'Inter, sans-serif';
+
+      setTimeout(() => {
+        setMessage('');
+        onClose();
+      }, 1500);
+    } catch (e) {
+      setMessage('Erreur réseau');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[240] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/70" onClick={onClose}></div>
+      <div className="glass-panel w-full max-w-2xl rounded-xl p-6 relative z-10 border border-white/20">
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-xl font-bold">⚙️ Paramètres de l'application</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-white">Fermer</button>
+        </div>
+
+        {loading ? (
+          <div className="text-center text-gray-400 py-8">Chargement...</div>
+        ) : (
+          <div className="space-y-6">
+            <div>
+              <h4 className="text-lg font-semibold mb-3">Police de caractères</h4>
+              <p className="text-sm text-gray-400 mb-4">Choisissez la police utilisée pour toute l'application</p>
+
+              <div className="space-y-2">
+                {fonts.map(font => (
+                  <label
+                    key={font.id}
+                    className={`flex items-center gap-3 p-4 rounded-lg border cursor-pointer transition-all ${
+                      selectedFont === font.id
+                        ? 'bg-purple-600/20 border-purple-500'
+                        : 'bg-black/20 border-white/10 hover:border-white/20'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="font"
+                      value={font.id}
+                      checked={selectedFont === font.id}
+                      onChange={(e) => setSelectedFont(e.target.value)}
+                      className="w-4 h-4"
+                    />
+                    <div className="flex-1">
+                      <div className="font-medium">{font.name}</div>
+                      <div className="text-sm text-gray-400" style={{ fontFamily: font.family }}>
+                        Aperçu de la police : The quick brown fox jumps over the lazy dog
+                      </div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {message && (
+              <div className={`p-3 rounded-lg text-center ${
+                message.includes('succès') ? 'bg-green-600/20 text-green-300' : 'bg-red-600/20 text-red-300'
+              }`}>
+                {message}
+              </div>
+            )}
+
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={onClose}
+                className="px-6 py-2 rounded-lg bg-gray-600 hover:bg-gray-500 text-white transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="px-6 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white transition-colors disabled:opacity-50"
+              >
+                {saving ? 'Sauvegarde...' : 'Sauvegarder'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Categories Management Modal (admin/superadmin only)
+const CategoriesModal = ({ isOpen, onClose, onCategoriesUpdated }: { isOpen: boolean, onClose: () => void, onCategoriesUpdated?: () => void }) => {
+  const [categories, setCategories] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [message, setMessage] = useState('');
+  const [formData, setFormData] = useState({ label: '', icon: 'Music' });
+
+  const API_BASE = (import.meta.env && (import.meta.env.VITE_API_BASE as string)) || 'http://localhost:3005';
+
+  const availableIcons = [
+    'Music', 'Play', 'Sparkles', 'Film', 'TrendingUp', 'Heart',
+    'Star', 'Book', 'Headphones', 'Mic', 'Radio', 'Disc',
+    'Target', 'Zap', 'Award', 'Compass', 'Globe', 'Sun'
+  ];
+
+  // Generate ID from label
+  const generateId = (label: string) => {
+    return label
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // Remove accents
+      .replace(/[^a-z0-9]+/g, '') // Remove non-alphanumeric
+      .substring(0, 30); // Limit length
+  };
+
+  useEffect(() => {
+    if (isOpen) loadCategories();
+  }, [isOpen]);
+
+  const loadCategories = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/categories`);
+      if (res.ok) {
+        const data = await res.json();
+        setCategories(data);
+      }
+    } catch (e) {
+      console.error('Error loading categories:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAdd = async () => {
+    if (!formData.label || !formData.icon) {
+      setMessage('Tous les champs sont requis');
+      return;
+    }
+
+    const generatedId = generateId(formData.label);
+    if (!generatedId) {
+      setMessage('Le nom de la catégorie doit contenir au moins un caractère alphanumérique');
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/api/categories`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          id: generatedId,
+          label: formData.label,
+          icon: formData.icon
+        })
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        setMessage(data.error || 'Erreur lors de l\'ajout');
+        return;
+      }
+
+      setMessage('Catégorie ajoutée avec succès !');
+      setFormData({ label: '', icon: 'Music' });
+      setAdding(false);
+      loadCategories();
+      if (onCategoriesUpdated) onCategoriesUpdated();
+      setTimeout(() => setMessage(''), 2000);
+    } catch (e) {
+      setMessage('Erreur réseau');
+    }
+  };
+
+  const handleUpdate = async (id: string) => {
+    const category = categories.find(c => c.id === id);
+    if (!category) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/api/categories/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ label: category.label, icon: category.icon })
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        setMessage(data.error || 'Erreur lors de la modification');
+        return;
+      }
+
+      setMessage('Catégorie modifiée avec succès !');
+      setEditing(null);
+      loadCategories();
+      if (onCategoriesUpdated) onCategoriesUpdated();
+      setTimeout(() => setMessage(''), 2000);
+    } catch (e) {
+      setMessage('Erreur réseau');
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Êtes-vous sûr de vouloir supprimer cette catégorie ?')) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/api/categories/${id}`, {
+        method: 'DELETE'
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        setMessage(data.error || 'Erreur lors de la suppression');
+        return;
+      }
+
+      setMessage('Catégorie supprimée avec succès !');
+      loadCategories();
+      if (onCategoriesUpdated) onCategoriesUpdated();
+      setTimeout(() => setMessage(''), 2000);
+    } catch (e) {
+      setMessage('Erreur réseau');
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[240] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/70" onClick={onClose}></div>
+      <div className="glass-panel w-full max-w-3xl rounded-xl p-6 relative z-10 border border-white/20 max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-xl font-bold">📂 Gestion des Catégories</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-white">Fermer</button>
+        </div>
+
+        {message && (
+          <div className={`mb-4 p-3 rounded-lg text-center ${
+            message.includes('succès') ? 'bg-green-600/20 text-green-300' : 'bg-red-600/20 text-red-300'
+          }`}>
+            {message}
+          </div>
+        )}
+
+        <button
+          onClick={() => setAdding(!adding)}
+          className="mb-4 bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg transition-colors"
+        >
+          <Plus className="inline w-4 h-4 mr-2" />
+          {adding ? 'Annuler' : 'Ajouter une catégorie'}
+        </button>
+
+        {adding && (
+          <div className="mb-6 p-4 bg-black/30 rounded-lg border border-white/10">
+            <h4 className="font-semibold mb-3">Nouvelle catégorie</h4>
+            <div className="mb-3">
+              <label className="text-xs text-gray-400 block mb-1">Nom de la catégorie</label>
+              <input
+                type="text"
+                value={formData.label}
+                onChange={e => setFormData({ ...formData, label: e.target.value })}
+                placeholder="ex: Yoga & Bien-être"
+                className="w-full bg-black/20 border border-white/10 rounded px-3 py-2 text-sm"
+              />
+              {formData.label && (
+                <p className="text-xs text-gray-500 mt-1">
+                  ID généré automatiquement: <span className="text-purple-400">{generateId(formData.label)}</span>
+                </p>
+              )}
+            </div>
+            <div className="mb-3">
+              <label className="text-xs text-gray-400 block mb-1">Icône</label>
+              <select
+                value={formData.icon}
+                onChange={e => setFormData({ ...formData, icon: e.target.value })}
+                className="w-full bg-black/20 border border-white/10 rounded px-3 py-2 text-sm"
+              >
+                {availableIcons.map(icon => (
+                  <option key={icon} value={icon}>{icon}</option>
+                ))}
+              </select>
+            </div>
+            <button
+              onClick={handleAdd}
+              className="w-full bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg transition-colors"
+            >
+              Ajouter
+            </button>
+          </div>
+        )}
+
+        {loading ? (
+          <div className="text-center text-gray-400 py-8">Chargement...</div>
+        ) : (
+          <div className="space-y-2">
+            {categories.length === 0 ? (
+              <div className="text-center text-gray-400 py-8">Aucune catégorie</div>
+            ) : (
+              categories.map(cat => (
+                <div key={cat.id} className="p-4 bg-black/20 rounded-lg border border-white/10">
+                  {editing === cat.id ? (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs text-gray-400 block mb-1">Label</label>
+                          <input
+                            type="text"
+                            value={cat.label}
+                            onChange={e => setCategories(categories.map(c => c.id === cat.id ? { ...c, label: e.target.value } : c))}
+                            className="w-full bg-black/30 border border-white/10 rounded px-3 py-2 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-400 block mb-1">Icône</label>
+                          <select
+                            value={cat.icon}
+                            onChange={e => setCategories(categories.map(c => c.id === cat.id ? { ...c, icon: e.target.value } : c))}
+                            className="w-full bg-black/30 border border-white/10 rounded px-3 py-2 text-sm"
+                          >
+                            {availableIcons.map(icon => (
+                              <option key={icon} value={icon}>{icon}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleUpdate(cat.id)}
+                          className="flex-1 bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded text-sm"
+                        >
+                          Sauvegarder
+                        </button>
+                        <button
+                          onClick={() => setEditing(null)}
+                          className="flex-1 bg-gray-600 hover:bg-gray-500 text-white px-4 py-2 rounded text-sm"
+                        >
+                          Annuler
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium">{cat.label}</div>
+                        <div className="text-xs text-gray-400">ID: {cat.id} • Icône: {cat.icon}</div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setEditing(cat.id)}
+                          className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded text-xs"
+                        >
+                          Modifier
+                        </button>
+                        <button
+                          onClick={() => handleDelete(cat.id)}
+                          className="bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded text-xs"
+                        >
+                          Supprimer
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // --- MAIN APP ---
 
 const App = () => {
@@ -1456,6 +2207,8 @@ const App = () => {
   const [user, setUser] = useState<User>({ email: 'guest@local', isAuthenticated: true, role: 'user' });
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [isUsersModalOpen, setIsUsersModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isCategoriesModalOpen, setIsCategoriesModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<ContentItem | null>(null);
   const [items, setItems] = useState<ContentItem[]>([]);
@@ -1465,8 +2218,10 @@ const App = () => {
   const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
   const [modalVideo, setModalVideo] = useState<{url?: string, platform?: string, title?: string}>({});
   const [aliveMap, setAliveMap] = useState<Record<string, boolean>>({});
+  const [thumbnailMap, setThumbnailMap] = useState<Record<string, string>>({});
   const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
   const [modalNote, setModalNote] = useState<ContentItem | null>(null);
+  const [categories, setCategories] = useState<Array<{id: string, label: string, icon: string}>>([]);
   
 
   // Filter Logic
@@ -1493,7 +2248,7 @@ const App = () => {
       if ((it.keywords || []).some(k => k.toLowerCase().includes(q))) return true;
       return false;
     });
-  }, [filteredItems, viewMode, aliveMap]);
+  }, [filteredItems, viewMode, aliveMap, searchQuery]);
 
   // API base (use Vite env `VITE_API_BASE` if provided)
   // Default to 3005 (server/index.cjs) to avoid port conflicts
@@ -1504,78 +2259,136 @@ const App = () => {
     setUser({ email, isAuthenticated: true });
   };
 
-  const handleLogout = () => {
-    // return to guest mosaic view on logout
-    setUser({ email: 'guest@local', isAuthenticated: true, role: 'user' });
-    setViewMode('videos');
-    setActiveFilter('all');
+  const handleLogout = async () => {
+    try {
+      const token = localStorage.getItem('authToken');
+      if (token) {
+        // Call logout endpoint
+        await fetch(`${API_BASE}/api/logout`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }).catch(() => {}); // Ignore errors
+      }
+    } catch (e) {
+      console.error('Logout error:', e);
+    } finally {
+      // Clear token and return to guest view
+      localStorage.removeItem('authToken');
+      setUser({ email: 'guest@local', isAuthenticated: true, role: 'user' });
+      setViewMode('videos');
+      setActiveFilter('all');
+    }
   };
 
-  const handleAddContent = (data: any) => {
+  const handleAddContent = async (data: any) => {
      const platform = getPlatform(data.url);
      const type = data.category === 'article' ? 'article' : 'video';
-     (async () => {
-       try {
-         const keywords = extractKeywords((data.title || '') + ' ' + (data.description || ''));
-         const payload: any = { 
-           title: data.title, 
-           url: data.url, 
-           type, 
-           platform, 
-           category: data.category, 
-           description: data.description, 
-           keywords,
-           owner: user.email // Track qui a ajouté le contenu
-         };
-         const res = await fetch(`${API_BASE}/api/contents`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-         if (!res.ok) throw new Error('Erreur API');
-         const inserted = await res.json();
-         const newItem: ContentItem = {
-           id: String(inserted.id),
-           type: inserted.type,
-           platform: inserted.platform || getPlatform(inserted.url),
-           title: inserted.title,
-           url: inserted.url,
-           category: inserted.category || 'outils',
-           description: inserted.description || '',
-           addedBy: inserted.addedBy || user.email,
-           date: inserted.date || ''
-         };
-         setItems(prev => [newItem, ...prev]);
-       } catch (e) {
-         console.error(e);
-         alert('Erreur lors de l\'ajout du contenu');
+
+     try {
+       const keywords = extractKeywords((data.title || '') + ' ' + (data.description || ''));
+
+       // Get auth token from user state (we'll need to store it)
+       const token = localStorage.getItem('authToken');
+       if (!token) {
+         alert('Vous devez être connecté pour ajouter du contenu');
+         return;
        }
-     })();
+
+       const payload: any = {
+         title: data.title,
+         url: data.url,
+         type,
+         platform,
+         category: data.category,
+         description: data.description,
+         keywords
+       };
+
+       const res = await fetch(`${API_BASE}/api/contents`, {
+         method: 'POST',
+         headers: {
+           'Content-Type': 'application/json',
+           'Authorization': `Bearer ${token}`
+         },
+         body: JSON.stringify(payload)
+       });
+
+       if (!res.ok) {
+         const errorData = await res.json().catch(() => ({}));
+         throw new Error(errorData.error || `Erreur ${res.status}: ${res.statusText}`);
+       }
+
+       const inserted = await res.json();
+       const newItem: ContentItem = {
+         id: String(inserted.id),
+         type: inserted.type,
+         platform: inserted.platform || getPlatform(inserted.url),
+         title: inserted.title,
+         url: inserted.url,
+         category: inserted.category || 'outils',
+         description: inserted.description || '',
+         addedBy: inserted.addedBy || user.email,
+         date: inserted.date || ''
+       };
+       setItems(prev => [newItem, ...prev]);
+     } catch (e) {
+       console.error('Erreur ajout contenu:', e);
+       alert(e instanceof Error ? e.message : 'Erreur lors de l\'ajout du contenu');
+     }
   };
 
   const handleAdminLogin = (userData: any) => {
-    // Le modal a déjà authentifié l'utilisateur, on set juste le state
-    setUser({ 
-      id: String(userData.id), 
-      email: userData.email, 
-      isAuthenticated: true, 
-      role: userData.role || 'user' 
+    // Store auth token in localStorage
+    if (userData.token) {
+      localStorage.setItem('authToken', userData.token);
+    }
+
+    // Update user state
+    setUser({
+      id: String(userData.id),
+      email: userData.email,
+      isAuthenticated: true,
+      role: userData.role || 'user'
     });
   };
 
-  const handleEditContent = (updated: ContentItem) => {
-    // update in supabase then local state
-    (async () => {
-      try {
-        const res = await fetch(`${API_BASE}/api/contents/${updated.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
-        if (!res.ok) throw new Error('API error');
-        const row = await res.json();
-        setItems(items.map(i => i.id === updated.id ? {...i, ...{
-          title: row.title,
-          url: row.url,
-          description: row.description,
-          category: row.category,
-          platform: row.platform,
-          keywords: row.keywords
-        }} : i));
-      } catch (e) { console.error(e); }
-    })();
+  const handleEditContent = async (updated: ContentItem) => {
+    try {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        alert('Vous devez être connecté pour modifier du contenu');
+        return;
+      }
+
+      const res = await fetch(`${API_BASE}/api/contents/${updated.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(updated)
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Erreur lors de la modification');
+      }
+
+      const row = await res.json();
+      setItems(items.map(i => i.id === updated.id ? {...i, ...{
+        title: row.title,
+        url: row.url,
+        description: row.description,
+        category: row.category,
+        platform: row.platform,
+        keywords: row.keywords
+      }} : i));
+    } catch (e) {
+      console.error('Erreur modification:', e);
+      alert(e instanceof Error ? e.message : 'Erreur lors de la modification du contenu');
+    }
   };
 
   const handleStartEdit = (item: ContentItem) => {
@@ -1583,82 +2396,198 @@ const App = () => {
     setIsEditModalOpen(true);
   };
 
-  const handleDeleteContent = (id: string) => {
+  const handleDeleteContent = async (id: string) => {
     if (!confirm('Supprimer définitivement cet élément ?')) return;
-    (async () => {
-      try {
-        const res = await fetch(`${API_BASE}/api/contents/${id}`, { method: 'DELETE' });
-        if (!res.ok) throw new Error('API error');
-        setItems(items.filter(i => i.id !== id));
-      } catch (e) { console.error(e); }
-    })();
+
+    try {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        alert('Vous devez être connecté pour supprimer du contenu');
+        return;
+      }
+
+      const res = await fetch(`${API_BASE}/api/contents/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Erreur lors de la suppression');
+      }
+
+      setItems(items.filter(i => i.id !== id));
+    } catch (e) {
+      console.error('Erreur suppression:', e);
+      alert(e instanceof Error ? e.message : 'Erreur lors de la suppression du contenu');
+    }
   };
 
-  // On mount: load contents from local API
+  // On mount: load contents from local API and check auth token
   useEffect(() => {
     let cancelled = false;
-    const load = async () => {
+
+    const checkAuth = async () => {
+      const token = localStorage.getItem('authToken');
+      if (token) {
+        // Verify token is still valid by trying to fetch users (will fail if invalid)
+        try {
+          const res = await fetch(`${API_BASE}/api/users`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          // If token is valid and user is superadmin, they'll get users list
+          // Otherwise they'll get 401/403, which means token is invalid or not superadmin
+          // We don't need the result, just checking if it's not 401
+          if (res.status === 401) {
+            localStorage.removeItem('authToken');
+          }
+        } catch (e) {
+          // Network error, keep token for now
+        }
+      }
+    };
+
+    const loadContents = async () => {
       try {
         const res = await fetch(`${API_BASE}/api/contents`);
         if (!res.ok) {
-          console.warn('API load error', res.statusText);
+          console.warn('API load error:', res.status, res.statusText);
+          if (res.status === 500) {
+            console.error('Server error - check if server is running on port', API_BASE);
+          }
           return;
         }
         const data = await res.json();
         if (cancelled) return;
         setItems(data as ContentItem[]);
+        // Reset aliveMap to force re-validation of all links
+        setAliveMap({});
       } catch (e) {
-        console.error(e);
+        console.error('Erreur chargement contenus:', e);
+        if (e instanceof TypeError && e.message.includes('fetch')) {
+          console.error('Impossible de se connecter au serveur. Vérifiez que le serveur est démarré sur', API_BASE);
+        }
       }
     };
-    load();
-    return () => { cancelled = true; };
+
+    const loadSettings = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/settings`);
+        if (res.ok) {
+          const data = await res.json();
+          const selectedFont = data.selectedFont || 'inter';
+
+          // Apply font globally
+          const fontMap: Record<string, string> = {
+            'inter': 'Inter, sans-serif',
+            'indie-flower': "'Indie Flower', cursive",
+            'cherry-swash': "'Cherry Swash', cursive",
+            'open-sans': "'Open Sans', sans-serif",
+            'raleway': "'Raleway', sans-serif",
+            'playfair': "'Playfair Display', serif",
+            'lato': "'Lato', sans-serif",
+            'merriweather': "'Merriweather', serif",
+            'montserrat': "'Montserrat', sans-serif",
+            'roboto-slab': "'Roboto Slab', serif",
+            'dancing': "'Dancing Script', cursive"
+          };
+
+          document.body.style.fontFamily = fontMap[selectedFont] || 'Inter, sans-serif';
+        }
+      } catch (e) {
+        console.error('Error loading settings:', e);
+      }
+    };
+
+    const loadCategories = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/categories`);
+        if (res.ok) {
+          const data = await res.json();
+          setCategories(data);
+        }
+      } catch (e) {
+        console.error('Error loading categories:', e);
+      }
+    };
+
+    checkAuth();
+    loadContents();
+    loadSettings();
+    loadCategories();
   }, []);
 
-  // Check video URL validity on mount and when items change
+  // Optimized URL validity check: lazy check, batch processing, cache results
   useEffect(() => {
     let cancelled = false;
-    const checkVideos = async () => {
+    const checkVideosOptimized = async () => {
       const videoItems = items.filter(i => i.type === 'video');
+      const uncheckedItems = videoItems.filter(item => aliveMap[item.id] === undefined);
+
+      if (uncheckedItems.length === 0) return;
+
       const newAliveMap: Record<string, boolean> = {};
-      
-      for (const item of videoItems) {
+
+      // Platforms that always work or don't need checking
+      // Note: YouTube is NOT in this list because videos can be deleted/private
+      const trustedPlatforms = ['facebook', 'instagram'];
+
+      // Process in batches of 5 to avoid overwhelming the network
+      const batchSize = 5;
+      for (let i = 0; i < uncheckedItems.length; i += batchSize) {
         if (cancelled) return;
-        // Skip if already checked
-        if (aliveMap[item.id] !== undefined) {
-          newAliveMap[item.id] = aliveMap[item.id];
-          continue;
-        }
-        
-        // Facebook bloque les requêtes CORS - toujours considérer comme valide
-        if (item.platform === 'facebook') {
-          newAliveMap[item.id] = true;
-          continue;
-        }
-        
-        try {
-          const isAlive = await checkUrlAlive(item.url, 8000);
-          if (!cancelled) {
-            newAliveMap[item.id] = isAlive;
+
+        const batch = uncheckedItems.slice(i, i + batchSize);
+        const promises = batch.map(async (item) => {
+          // Skip check for trusted platforms
+          if (trustedPlatforms.includes(item.platform || '')) {
+            return { id: item.id, alive: true };
           }
-        } catch (e) {
-          if (!cancelled) {
-            newAliveMap[item.id] = false;
+
+          try {
+            const isAlive = await checkUrlAlive(item.url, 5000);
+            return { id: item.id, alive: isAlive };
+          } catch (e) {
+            // If validation fails, assume alive to avoid false negatives
+            return { id: item.id, alive: true };
           }
+        });
+
+        const results = await Promise.allSettled(promises);
+
+        results.forEach((result, idx) => {
+          if (result.status === 'fulfilled' && result.value) {
+            newAliveMap[result.value.id] = result.value.alive;
+          } else {
+            // If check failed, assume alive to avoid false negatives
+            newAliveMap[batch[idx].id] = true;
+          }
+        });
+
+        // Update state incrementally for better UX
+        if (!cancelled && Object.keys(newAliveMap).length > 0) {
+          setAliveMap(prev => ({ ...prev, ...newAliveMap }));
         }
-      }
-      
-      if (!cancelled && Object.keys(newAliveMap).length > 0) {
-        setAliveMap(prev => ({ ...prev, ...newAliveMap }));
       }
     };
-    
+
+    // Only check on mount or when new items are added
     if (items.length > 0) {
-      checkVideos();
+      // Debounce to avoid multiple checks
+      const timer = setTimeout(() => {
+        checkVideosOptimized();
+      }, 500);
+
+      return () => {
+        cancelled = true;
+        clearTimeout(timer);
+      };
     }
-    
+
     return () => { cancelled = true; };
-  }, [items]);
+  }, [items.length]); // Only trigger on items length change, not full items array
 
   // Fetch missing/placeholder titles (uses backend to avoid CORS)
   useEffect(() => {
@@ -1709,6 +2638,79 @@ const App = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items]);
 
+  // Fetch thumbnails for Instagram and Facebook videos
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchThumbnails = async () => {
+      const videoItems = items.filter(i => i.type === 'video');
+      const itemsNeedingThumbnails = videoItems.filter(item =>
+        (item.platform === 'instagram' || item.platform === 'facebook') &&
+        !thumbnailMap[item.id]
+      );
+
+      if (itemsNeedingThumbnails.length === 0) return;
+
+      const newThumbnails: Record<string, string> = {};
+
+      // Process in batches of 3 to avoid overwhelming the backend
+      const batchSize = 3;
+      for (let i = 0; i < itemsNeedingThumbnails.length; i += batchSize) {
+        if (cancelled) return;
+
+        const batch = itemsNeedingThumbnails.slice(i, i + batchSize);
+        const promises = batch.map(async (item) => {
+          try {
+            const response = await fetch(`${API_BASE}/api/fetch-title`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ url: item.url })
+            });
+
+            if (response.ok) {
+              const data = await response.json();
+              if (data.thumbnail) {
+                return { id: item.id, thumbnail: data.thumbnail };
+              }
+            }
+          } catch (e) {
+            console.error(`Error fetching thumbnail for ${item.platform}:`, e);
+          }
+          return { id: item.id, thumbnail: null };
+        });
+
+        const results = await Promise.allSettled(promises);
+
+        results.forEach((result, idx) => {
+          if (result.status === 'fulfilled' && result.value?.thumbnail) {
+            newThumbnails[result.value.id] = result.value.thumbnail;
+          }
+        });
+
+        // Update state incrementally for better UX
+        if (!cancelled && Object.keys(newThumbnails).length > 0) {
+          setThumbnailMap(prev => ({ ...prev, ...newThumbnails }));
+        }
+
+        // Small delay between batches to avoid overwhelming the server
+        if (i + batchSize < itemsNeedingThumbnails.length) {
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+      }
+    };
+
+    // Debounce to avoid multiple fetches
+    const timer = setTimeout(() => {
+      fetchThumbnails();
+    }, 500);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items.length, items]); // Trigger on items change
+
   // always show mosaic; auth screen removed per request
 
   return (
@@ -1719,14 +2721,16 @@ const App = () => {
           <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-amber-600/10 rounded-full blur-[120px]"></div>
       </div>
 
-      <Header 
-        user={user} 
-        onLogout={handleLogout} 
+      <Header
+        user={user}
+        onLogout={handleLogout}
         activeFilter={activeFilter}
         onFilterChange={setActiveFilter}
         onOpenAdd={() => setIsAddModalOpen(true)}
         onOpenAdmin={() => setIsAdminModalOpen(true)}
         onOpenUsers={() => setIsUsersModalOpen(true)}
+        onOpenCategories={() => setIsCategoriesModalOpen(true)}
+        onOpenSettings={() => setIsSettingsModalOpen(true)}
         searchQuery={searchQuery}
         onSearchChange={(v: string) => setSearchQuery(v)}
       />
@@ -1759,7 +2763,7 @@ const App = () => {
           </button>
         </div>
 
-        <MasonryGrid items={displayedItems} user={user} onOpenVideo={(u,p,t) => { setModalVideo({url:u, platform:p, title:t}); setIsVideoModalOpen(true); }} onOpenNote={(it) => { setModalNote(it); setIsNoteModalOpen(true); }} onEdit={(it) => handleStartEdit(it)} onDelete={(id) => handleDeleteContent(id)} />
+        <MasonryGrid items={displayedItems} user={user} onOpenVideo={(u,p,t) => { setModalVideo({url:u, platform:p, title:t}); setIsVideoModalOpen(true); }} onOpenNote={(it) => { setModalNote(it); setIsNoteModalOpen(true); }} onEdit={(it) => handleStartEdit(it)} onDelete={(id) => handleDeleteContent(id)} thumbnailMap={thumbnailMap} categories={categories} />
       </main>
 
       <VideoModal isOpen={isVideoModalOpen} onClose={() => { setIsVideoModalOpen(false); setModalVideo({}); }} url={modalVideo.url} platform={modalVideo.platform} title={modalVideo.title} />
@@ -1767,6 +2771,8 @@ const App = () => {
 
       <AdminLoginModal isOpen={isAdminModalOpen} onClose={() => setIsAdminModalOpen(false)} onLogin={handleAdminLogin} />
       <UsersModal isOpen={isUsersModalOpen} onClose={() => setIsUsersModalOpen(false)} />
+      <CategoriesModal isOpen={isCategoriesModalOpen} onClose={() => setIsCategoriesModalOpen(false)} />
+      <SettingsModal isOpen={isSettingsModalOpen} onClose={() => setIsSettingsModalOpen(false)} />
       <EditContentModal isOpen={isEditModalOpen} item={editingItem} onClose={() => { setIsEditModalOpen(false); setEditingItem(null); }} onSave={(u) => handleEditContent(u)} />
 
       <AddContentModal 
@@ -1783,5 +2789,8 @@ const App = () => {
 };
 
 const container = document.getElementById('root');
-const root = createRoot(container!);
-root.render(<App />);
+if (container && !container.hasAttribute('data-root-initialized')) {
+  container.setAttribute('data-root-initialized', 'true');
+  const root = createRoot(container);
+  root.render(<App />);
+}
