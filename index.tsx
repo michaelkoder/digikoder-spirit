@@ -1401,8 +1401,8 @@ const NoteModal = ({ isOpen, onClose, note }: { isOpen: boolean, onClose: () => 
   return (
     <div className="fixed inset-0 z-[210] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/70" onClick={onClose}></div>
-      <div className="relative w-full max-w-2xl bg-black/80 rounded-lg overflow-hidden border border-white/10 z-10 p-6 text-gray-100">
-        <div className="flex justify-between items-start gap-4 mb-4">
+      <div className="relative w-full max-w-2xl max-h-[80vh] bg-black/80 rounded-lg overflow-hidden border border-white/10 z-10 flex flex-col text-gray-100">
+        <div className="flex justify-between items-start gap-4 p-6 border-b border-white/10 flex-shrink-0">
           <div>
             <h2 className="text-xl font-bold">{note.title}</h2>
             <div className="text-xs text-gray-400">Ajouté par {note.addedBy} • {note.date}</div>
@@ -1411,14 +1411,16 @@ const NoteModal = ({ isOpen, onClose, note }: { isOpen: boolean, onClose: () => 
             <button onClick={onClose} className="text-gray-300 hover:text-white">Fermer</button>
           </div>
         </div>
-        <div className="prose max-w-full text-gray-200">
-          {note.description ? <p>{note.description}</p> : <p>Aucune description.</p>}
-        </div>
-        {note.url && note.url !== '#' && (
-          <div className="mt-6">
-            <a href={note.url} target="_blank" rel="noopener noreferrer" className="bg-white/10 hover:bg-white/20 px-3 py-2 rounded text-white">Ouvrir la ressource</a>
+        <div className="overflow-y-auto flex-1 p-6">
+          <div className="text-gray-200">
+            {note.description ? <pre className="whitespace-pre-wrap break-words font-sans">{note.description}</pre> : <p>Aucune description.</p>}
           </div>
-        )}
+          {note.url && note.url !== '#' && (
+            <div className="mt-6">
+              <a href={note.url} target="_blank" rel="noopener noreferrer" className="bg-white/10 hover:bg-white/20 px-3 py-2 rounded text-white inline-block">Ouvrir la ressource</a>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
