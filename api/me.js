@@ -3,7 +3,7 @@ import { parse } from 'cookie';
 
 export default function handler(req, res) {
   try {
-    const JWT_SECRET = process.env.JWT_SECRET;
+    const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-key'; // Use same fallback as server
     if (!JWT_SECRET) return res.status(500).json({ error: 'Server not configured' });
 
     const cookieHeader = req.headers.cookie || '';

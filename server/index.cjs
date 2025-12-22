@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
+const jwt = require('jsonwebtoken');
 const db = require('./db_json.cjs');
 const fs = require('fs');
 const path = require('path');
@@ -8,6 +9,17 @@ const path = require('path');
 const app = express();
 app.use(cors());
 app.use(bodyParser.json());
+
+// Log ALL incoming requests
+app.use((req, res, next) => {
+  console.log(`\n🌐 INCOMING REQUEST: ${req.method} ${req.path}`);
+  console.log('   Headers:', Object.keys(req.headers).join(', '));
+  console.log('   Body:', req.method === 'POST' || req.method === 'PUT' ? JSON.stringify(req.body) : 'N/A');
+  next();
+});
+
+// JWT Secret - same as in Vercel API for consistency
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-key';
 
 // ============ SETTINGS DATABASE FUNCTIONS ============
 
@@ -20,7 +32,7 @@ const ensureSettingsFile = () => {
   }
   if (!fs.existsSync(SETTINGS_FILE)) {
     const defaultSettings = {
-      selectedFont: 'inter',
+      selectedFont: 'Inter',
       categories: []
     };
     fs.writeFileSync(SETTINGS_FILE, JSON.stringify(defaultSettings, null, 2));
@@ -40,49 +52,63 @@ const writeDb = (data) => {
 
 // ============ AUTHENTICATION MIDDLEWARE ============
 
-// Simple token-based auth middleware (store tokens in memory for demo)
-const activeSessions = new Map(); // Map<token, { userId, email, role }>
-
+// JWT-based auth middleware (consistent with Vercel API)
 const authMiddleware = (requiredRole = null) => {
   return async (req, res, next) => {
+    console.log('[AuthMiddleware] 🔐 START -', req.method, req.path);
     try {
       const authHeader = req.headers.authorization;
+      console.log('[AuthMiddleware] 🔑 Auth header:', authHeader ? 'present' : 'missing');
+
       if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        console.log('[AuthMiddleware] ❌ No Bearer token');
         return res.status(401).json({ error: 'Non autorisé - Token manquant' });
       }
 
       const token = authHeader.substring(7);
-      const session = activeSessions.get(token);
+      console.log('[AuthMiddleware] 🎫 Token extracted, length:', token.length);
 
-      if (!session) {
-        return res.status(401).json({ error: 'Non autorisé - Session invalide' });
+      // Verify JWT token
+      let payload;
+      try {
+        console.log('[AuthMiddleware] 🔍 Verifying JWT...');
+        payload = jwt.verify(token, JWT_SECRET);
+        console.log('[AuthMiddleware] ✅ JWT verified, user:', payload.sub);
+      } catch (jwtErr) {
+        console.log('[AuthMiddleware] ❌ JWT verification failed:', jwtErr.message);
+        return res.status(401).json({ error: 'Non autorisé - Token invalide ou expiré' });
       }
 
-      // Verify user still exists
-      const user = db.getUserById(session.userId);
+      // Get user from database using email from JWT
+      console.log('[AuthMiddleware] 📂 Loading user from DB...');
+      const user = db.getUserByEmail(payload.sub);
+      console.log('[AuthMiddleware] 👤 User found:', user ? user.email : 'NOT FOUND');
+
       if (!user) {
-        activeSessions.delete(token);
+        console.log('[AuthMiddleware] ❌ User not found in DB');
         return res.status(401).json({ error: 'Non autorisé - Utilisateur introuvable' });
       }
 
       // Check role if required
       if (requiredRole && user.role !== requiredRole && user.role !== 'superadmin') {
+        console.log('[AuthMiddleware] ❌ Insufficient permissions');
         return res.status(403).json({ error: 'Accès refusé - Permissions insuffisantes' });
       }
 
       // Attach user info to request
       req.user = { id: user.id, email: user.email, role: user.role };
+      console.log('[AuthMiddleware] ✅ SUCCESS - Calling next()');
       next();
     } catch (e) {
-      console.error('Auth middleware error:', e);
+      console.error('[AuthMiddleware] 💥 ERROR:', e);
       return res.status(500).json({ error: 'Erreur serveur' });
     }
   };
 };
 
-// Generate simple token (in production, use JWT)
-const generateToken = () => {
-  return require('crypto').randomBytes(32).toString('hex');
+// Generate JWT token (consistent with Vercel API)
+const generateToken = (email, role) => {
+  return jwt.sign({ sub: email, role: role }, JWT_SECRET, { expiresIn: '8h' });
 };
 
 const mapRow = (r) => ({
@@ -231,20 +257,16 @@ app.post('/api/login', async (req, res) => {
       return res.status(401).json({ error: 'Identifiants invalides' });
     }
 
-    // Generate token and create session
-    const token = generateToken();
-    activeSessions.set(token, {
-      userId: user.id,
-      email: user.email,
-      role: user.role
-    });
+    // Generate JWT token (consistent with Vercel API)
+    const token = generateToken(user.email, user.role);
 
     res.json({
       id: user.id,
       email: user.email,
       role: user.role,
       created_at: user.created_at,
-      token // Return token to client
+      token,
+      isAuthenticated: true
     });
   } catch (e) {
     console.error('Login error:', e);
@@ -252,19 +274,47 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// Logout endpoint
-app.post('/api/logout', (req, res) => {
+// Get current user endpoint (verify JWT and return user info)
+app.get('/api/me', (req, res) => {
   try {
     const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.substring(7);
-      activeSessions.delete(token);
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Non autorisé - Token manquant' });
     }
-    res.json({ ok: true });
+
+    const token = authHeader.substring(7);
+
+    // Verify JWT token
+    let payload;
+    try {
+      payload = jwt.verify(token, JWT_SECRET);
+    } catch (jwtErr) {
+      console.log('JWT verification failed:', jwtErr.message);
+      return res.status(401).json({ error: 'Non autorisé - Token invalide ou expiré' });
+    }
+
+    // Get user from database
+    const user = db.getUserByEmail(payload.sub);
+    if (!user) {
+      return res.status(401).json({ error: 'Non autorisé - Utilisateur introuvable' });
+    }
+
+    res.json({
+      id: user.id,
+      email: user.email,
+      role: user.role
+    });
   } catch (e) {
-    console.error('Logout error:', e);
+    console.error('Get me error:', e);
     res.status(500).json({ error: 'Erreur serveur' });
   }
+});
+
+// Logout endpoint (JWT-based, just return OK - client will remove token)
+app.post('/api/logout', (req, res) => {
+  // With JWT, we don't need to track sessions server-side
+  // The client simply removes the token from localStorage
+  res.json({ ok: true });
 });
 
 // Get all users (superadmin only)
@@ -743,112 +793,67 @@ app.post('/api/instagram-embed', async (req, res) => {
 
 app.post('/api/validate-url', async (req, res) => {
   try {
-    const { url } = req.body;
-    if (!url || typeof url !== 'string') {
-      return res.status(400).json({ error: 'URL required', alive: null });
-    }
+    const { url } = req.body || {};
+    if (!url) return res.status(400).json({ error: 'URL required' });
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-    const headers = {
-      'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36',
-      'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      'accept-language': 'en-US,en;q=0.9',
-      'cache-control': 'no-cache'
-    };
+    // Check if it's a YouTube URL and extract video ID
+    let videoId = null;
 
     try {
-      // Try HEAD request first (faster)
-      let response = await fetch(url, {
-        method: 'HEAD',
-        signal: controller.signal,
-        headers,
-        redirect: 'follow'
-      });
-
-      // If HEAD fails with 405 (Method Not Allowed) or 403 (Forbidden), try GET
-      // Some servers block HEAD requests but allow GET
-      if (response.status === 405 || response.status === 403 || response.status === 400) {
-        console.log(`HEAD failed with ${response.status}, trying GET for:`, url);
-
-        response = await fetch(url, {
-          method: 'GET',
-          signal: controller.signal,
-          headers,
-          redirect: 'follow'
-        });
+      const u = new URL(url);
+      const host = u.hostname.replace('www.', '');
+      if (host === 'youtu.be') {
+        videoId = u.pathname.slice(1).split('?')[0]; // Remove query params
+      } else if (host.endsWith('youtube.com')) {
+        videoId = u.searchParams.get('v');
       }
-
-      clearTimeout(timeoutId);
-
-      // Consider 2xx and 3xx as alive
-      const isAlive = response.ok || (response.status >= 300 && response.status < 400);
-
-      return res.json({
-        alive: isAlive,
-        status: response.status,
-        statusText: response.statusText,
-        redirected: response.redirected,
-        finalUrl: response.url,
-        method: response.status === 405 || response.status === 403 ? 'GET (HEAD failed)' : 'HEAD'
-      });
     } catch (e) {
+      // Try regex fallback
+      const match = url.match(/(?:v=|\/v\/|embed\/|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+      videoId = match ? match[1] : null;
+    }
+
+    if (!videoId) {
+      // Not a YouTube URL, consider it alive (we can't validate Facebook/Instagram)
+      console.log(`[validate-url] Not a YouTube URL: ${url} - assuming alive`);
+      return res.json({ alive: true });
+    }
+
+    // Clean video ID (remove any trailing characters)
+    videoId = videoId.substring(0, 11);
+
+    // PRIMARY METHOD: YouTube oEmbed API (most reliable)
+    // Returns 200 for valid videos, 404 for deleted/private videos
+    const oembedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+      const response = await fetch(oembedUrl, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; VideoChecker/1.0)'
+        }
+      });
       clearTimeout(timeoutId);
 
-      // If HEAD/GET both failed, try one more time with GET and longer timeout
-      // This catches cases where HEAD is blocked but GET works
-      if (e.name !== 'AbortError') {
-        try {
-          const controller2 = new AbortController();
-          const timeoutId2 = setTimeout(() => controller2.abort(), 5000);
+      // oEmbed returns 200 only for valid, public videos
+      // Returns 401 for private, 404 for deleted
+      const alive = response.status === 200;
+      console.log(`[validate-url] Video ${videoId}: ${alive ? '✓ ALIVE' : '✗ DEAD'} (oEmbed status: ${response.status})`);
+      return res.json({ alive });
 
-          const response = await fetch(url, {
-            method: 'GET',
-            signal: controller2.signal,
-            headers,
-            redirect: 'follow'
-          });
+    } catch (fetchError) {
+      // Network error or timeout
+      console.log(`[validate-url] Video ${videoId}: Network error - ${fetchError.message}`);
 
-          clearTimeout(timeoutId2);
-
-          const isAlive = response.ok || (response.status >= 300 && response.status < 400);
-
-          return res.json({
-            alive: isAlive,
-            status: response.status,
-            statusText: response.statusText,
-            redirected: response.redirected,
-            finalUrl: response.url,
-            method: 'GET (retry after error)'
-          });
-        } catch (retryError) {
-          // Both attempts failed
-        }
-      }
-
-      // If it's a timeout or network error, return unknown status (not dead)
-      // This prevents false negatives
-      if (e.name === 'AbortError' || e.code === 'ETIMEDOUT' || e.code === 'ECONNREFUSED' || e.code === 'ENOTFOUND') {
-        return res.json({
-          alive: null, // Unknown - don't mark as dead
-          error: e.message,
-          code: e.code,
-          note: 'Network timeout or DNS error - link might be slow or temporarily unavailable but not necessarily dead'
-        });
-      }
-
-      // For other errors, still return unknown to be safe
-      return res.json({
-        alive: null,
-        error: e.message,
-        code: e.code,
-        note: 'Error validating URL - assuming alive to avoid false negatives'
-      });
+      // On network errors, assume alive to avoid false positives
+      return res.json({ alive: true });
     }
   } catch (e) {
-    console.error('validate-url error:', e);
-    return res.status(500).json({ error: 'Server error', alive: null });
+    console.error('[validate-url] error:', e);
+    return res.status(500).json({ error: e.message });
   }
 });
 
@@ -866,18 +871,23 @@ app.get('/api/settings', (req, res) => {
 });
 
 // PUT /api/settings - Update settings (admin only)
-app.put('/api/settings', authMiddleware, (req, res) => {
+app.put('/api/settings', authMiddleware(), (req, res) => {
+  console.log('[Settings] 🚀 PUT HANDLER REACHED - body:', req.body);
   try {
     const { selectedFont } = req.body;
+    console.log('[Settings] PUT request - font:', selectedFont, 'user:', req.user?.email);
 
-    // Validate font selection
+    // Validate font selection - Liste complète des Google Fonts disponibles
     const allowedFonts = [
-      'inter', 'indie-flower', 'cherry-swash', 'open-sans',
-      'raleway', 'playfair', 'lato', 'merriweather',
-      'montserrat', 'roboto-slab', 'dancing'
+      'Inter', 'Roboto', 'Open Sans', 'Lato', 'Montserrat', 'Poppins', 'Raleway', 'Ubuntu',
+      'Nunito', 'Work Sans', 'Quicksand', 'Josefin Sans', 'DM Sans', 'Space Grotesk',
+      'Playfair Display', 'Merriweather', 'Lora', 'PT Serif', 'Crimson Text',
+      'EB Garamond', 'Libre Baskerville', 'Indie Flower', 'Dancing Script', 'Pacifico',
+      'Caveat', 'Fira Code', 'JetBrains Mono', 'Courier Prime'
     ];
 
     if (!selectedFont || !allowedFonts.includes(selectedFont)) {
+      console.log('[Settings] ❌ Invalid font:', selectedFont);
       return res.status(400).json({
         error: 'Invalid font selection',
         allowedFonts
@@ -886,6 +896,7 @@ app.put('/api/settings', authMiddleware, (req, res) => {
 
     // Only admin and superadmin can update settings
     if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+      console.log('[Settings] ❌ Insufficient permissions:', req.user.role);
       return res.status(403).json({ error: 'Admin access required' });
     }
 
@@ -898,12 +909,13 @@ app.put('/api/settings', authMiddleware, (req, res) => {
 
     writeDb(db);
 
+    console.log('[Settings] ✅ Font saved successfully:', selectedFont);
     return res.json({
       success: true,
       settings: db
     });
   } catch (e) {
-    console.error('PUT /api/settings error:', e);
+    console.error('[Settings] 💥 PUT /api/settings error:', e);
     return res.status(500).json({ error: 'Server error' });
   }
 });
@@ -1026,5 +1038,8 @@ app.delete('/api/categories/:id', (req, res) => {
 });
 
 // Use a non-conflicting default port
-const PORT = process.env.PORT || 3005;
-app.listen(PORT, () => console.log('Server listening on port', PORT));
+const PORT = process.env.PORT || 3002;
+app.listen(PORT, '::', () => {
+  console.log(`Server listening on port ${PORT}`);
+  console.log(`Backend available at http://localhost:${PORT}`);
+});
