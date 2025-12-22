@@ -626,6 +626,278 @@ const EditVideoModal = ({ isOpen, item, categories, onClose, onSave }: any) => {
   );
 };
 
+// Modale pour ajouter une vidéo
+const AddVideoModal = ({ isOpen, categories, onClose, onSave }: any) => {
+  const [title, setTitle] = useState('');
+  const [url, setUrl] = useState('');
+  const [category, setCategory] = useState('');
+  const [description, setDescription] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  // Détecter automatiquement la plateforme
+  const detectPlatform = (url: string): 'youtube' | 'facebook' | 'instagram' | 'other' => {
+    if (url.includes('youtube.com') || url.includes('youtu.be')) return 'youtube';
+    if (url.includes('facebook.com') || url.includes('fb.watch')) return 'facebook';
+    if (url.includes('instagram.com')) return 'instagram';
+    return 'other';
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim() || !url.trim() || !category) {
+      setError('Tous les champs obligatoires doivent être remplis');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    try {
+      const platform = detectPlatform(url);
+      const res = await apiFetch('/api/contents', {
+        method: 'POST',
+        body: JSON.stringify({ title, url, category, description, type: 'video', platform })
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const newItem = await res.json();
+      onSave(newItem);
+      // Reset form
+      setTitle('');
+      setUrl('');
+      setCategory('');
+      setDescription('');
+      onClose();
+    } catch (err: any) {
+      setError(err.message || 'Erreur lors de la création');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-[220] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/70" onClick={onClose}></div>
+      <div className="glass-panel w-full max-w-md rounded-xl p-6 relative z-10 border border-white/20">
+          <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Video size={20} className="text-purple-400" /> Ajouter une vidéo</h3>
+          <form onSubmit={handleSubmit} className="space-y-3">
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Titre *</label>
+                <input type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder="Titre de la vidéo" className="w-full bg-black/30 border border-white/10 rounded p-2 text-white" required />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">URL *</label>
+                <input type="url" value={url} onChange={e => setUrl(e.target.value)} placeholder="https://youtube.com/..." className="w-full bg-black/30 border border-white/10 rounded p-2 text-white" required />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Catégorie *</label>
+                <select value={category} onChange={e => setCategory(e.target.value)} className="w-full bg-black/30 border border-white/10 rounded p-2 text-white" required>
+                  <option value="">Sélectionner une catégorie</option>
+                  {categories.map((cat: any) => (
+                    <option key={cat.id} value={cat.id}>{cat.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Description (optionnel)</label>
+                <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Description" className="w-full bg-black/30 border border-white/10 rounded p-2 text-white" rows={3} />
+              </div>
+              {error && <div className="text-red-400 text-sm">{error}</div>}
+              <div className="flex gap-2 pt-2">
+                <button type="button" onClick={onClose} className="flex-1 bg-gray-600 hover:bg-gray-500 text-white py-2 rounded">Annuler</button>
+                <button type="submit" disabled={loading} className="flex-1 bg-purple-600 hover:bg-purple-500 text-white py-2 rounded flex items-center justify-center gap-2">
+                  {loading ? 'Création...' : <><Plus size={18} /> Créer</>}
+                </button>
+              </div>
+          </form>
+      </div>
+    </div>
+  );
+};
+
+// Modale pour ajouter une note
+const AddNoteModal = ({ isOpen, categories, onClose, onSave }: any) => {
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
+  const [category, setCategory] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim() || !content.trim() || !category) {
+      setError('Tous les champs obligatoires doivent être remplis');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    try {
+      const res = await apiFetch('/api/contents', {
+        method: 'POST',
+        body: JSON.stringify({
+          title,
+          url: `note://${Date.now()}`, // URL fictive pour les notes
+          category,
+          description: content,
+          type: 'article',
+          platform: 'other'
+        })
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const newItem = await res.json();
+      onSave(newItem);
+      // Reset form
+      setTitle('');
+      setContent('');
+      setCategory('');
+      onClose();
+    } catch (err: any) {
+      setError(err.message || 'Erreur lors de la création');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-[220] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/70" onClick={onClose}></div>
+      <div className="glass-panel w-full max-w-4xl rounded-xl p-6 relative z-10 border border-white/20">
+          <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><BookOpen size={20} className="text-amber-400" /> Ajouter une note</h3>
+          <form onSubmit={handleSubmit}>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Colonne gauche - Infos */}
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Titre *</label>
+                  <input type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder="Titre de la note" className="w-full bg-black/30 border border-white/10 rounded p-2 text-white" required />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Catégorie *</label>
+                  <select value={category} onChange={e => setCategory(e.target.value)} className="w-full bg-black/30 border border-white/10 rounded p-2 text-white" required>
+                    <option value="">Sélectionner une catégorie</option>
+                    {categories.map((cat: any) => (
+                      <option key={cat.id} value={cat.id}>{cat.label}</option>
+                    ))}
+                  </select>
+                </div>
+                {error && <div className="text-red-400 text-sm">{error}</div>}
+                <div className="flex gap-2 pt-2">
+                  <button type="button" onClick={onClose} className="flex-1 bg-gray-600 hover:bg-gray-500 text-white py-2 rounded">Annuler</button>
+                  <button type="submit" disabled={loading} className="flex-1 bg-amber-600 hover:bg-amber-500 text-white py-2 rounded flex items-center justify-center gap-2">
+                    {loading ? 'Création...' : <><Plus size={18} /> Créer</>}
+                  </button>
+                </div>
+              </div>
+              {/* Colonne droite - Contenu */}
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Contenu de la note *</label>
+                <textarea
+                  value={content}
+                  onChange={e => setContent(e.target.value)}
+                  placeholder="Écrivez votre note ici..."
+                  className="w-full h-64 bg-black/30 border border-white/10 rounded p-3 text-white resize-none"
+                  required
+                />
+              </div>
+            </div>
+          </form>
+      </div>
+    </div>
+  );
+};
+
+// Modale pour modifier une note (2 colonnes)
+const EditNoteModal = ({ isOpen, item, categories, onClose, onSave }: any) => {
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
+  const [category, setCategory] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (item) {
+      setTitle(item.title || '');
+      setContent(item.description || '');
+      setCategory(item.category || '');
+      setError('');
+    }
+  }, [item, isOpen]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim() || !content.trim() || !category) {
+      setError('Tous les champs obligatoires doivent être remplis');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    try {
+      const res = await apiFetch(`/api/contents/${item.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ title, category, description: content })
+      });
+      if (!res.ok) throw new Error(await res.text());
+      await onSave({ ...item, title, category, description: content });
+      onClose();
+    } catch (err: any) {
+      setError(err.message || 'Erreur lors de la sauvegarde');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-[220] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/70" onClick={onClose}></div>
+      <div className="glass-panel w-full max-w-4xl rounded-xl p-6 relative z-10 border border-white/20">
+          <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><BookOpen size={20} className="text-amber-400" /> Modifier la note</h3>
+          <form onSubmit={handleSubmit}>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Colonne gauche - Infos */}
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Titre *</label>
+                  <input type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder="Titre de la note" className="w-full bg-black/30 border border-white/10 rounded p-2 text-white" required />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Catégorie *</label>
+                  <select value={category} onChange={e => setCategory(e.target.value)} className="w-full bg-black/30 border border-white/10 rounded p-2 text-white" required>
+                    <option value="">Sélectionner une catégorie</option>
+                    {categories.map((cat: any) => (
+                      <option key={cat.id} value={cat.id}>{cat.label}</option>
+                    ))}
+                  </select>
+                </div>
+                {error && <div className="text-red-400 text-sm">{error}</div>}
+                <div className="flex gap-2 pt-2">
+                  <button type="button" onClick={onClose} className="flex-1 bg-gray-600 hover:bg-gray-500 text-white py-2 rounded">Annuler</button>
+                  <button type="submit" disabled={loading} className="flex-1 bg-amber-600 hover:bg-amber-500 text-white py-2 rounded">
+                    {loading ? 'Sauvegarde...' : 'Sauvegarder'}
+                  </button>
+                </div>
+              </div>
+              {/* Colonne droite - Contenu */}
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Contenu de la note *</label>
+                <textarea
+                  value={content}
+                  onChange={e => setContent(e.target.value)}
+                  placeholder="Écrivez votre note ici..."
+                  className="w-full h-64 bg-black/30 border border-white/10 rounded p-3 text-white resize-none"
+                  required
+                />
+              </div>
+            </div>
+          </form>
+      </div>
+    </div>
+  );
+};
+
 const AdminLoginModal = ({ isOpen, onClose, onLogin }: any) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -651,7 +923,7 @@ const AdminLoginModal = ({ isOpen, onClose, onLogin }: any) => {
       setLoading(false);
     }
   };
-  
+
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 z-[220] flex items-center justify-center p-4">
@@ -1303,6 +1575,8 @@ const App = () => {
   const [selectedArticle, setSelectedArticle] = useState<{ title: string; content: string } | null>(null);
   const [itemToEdit, setItemToEdit] = useState<ContentItem | null>(null);
   const [aliveMap, setAliveMap] = useState<Record<string, boolean>>({});
+  const [isAddVideoModalOpen, setIsAddVideoModalOpen] = useState(false);
+  const [isAddNoteModalOpen, setIsAddNoteModalOpen] = useState(false);
 
   useEffect(() => {
     const checkAuthAndLoadData = async () => {
@@ -1542,8 +1816,9 @@ const App = () => {
           onClose={() => setSelectedArticle(null)}
         />
 
+        {/* Modale d'édition - utilise EditNoteModal pour les articles, EditVideoModal pour les vidéos */}
         <EditVideoModal
-          isOpen={!!itemToEdit}
+          isOpen={!!itemToEdit && itemToEdit.type === 'video'}
           item={itemToEdit}
           categories={categories}
           onClose={() => setItemToEdit(null)}
@@ -1551,7 +1826,36 @@ const App = () => {
             setItems(items.map(i => i.id === updatedItem.id ? updatedItem : i));
           }}
         />
-        
+
+        <EditNoteModal
+          isOpen={!!itemToEdit && itemToEdit.type === 'article'}
+          item={itemToEdit}
+          categories={categories}
+          onClose={() => setItemToEdit(null)}
+          onSave={(updatedItem: ContentItem) => {
+            setItems(items.map(i => i.id === updatedItem.id ? updatedItem : i));
+          }}
+        />
+
+        {/* Modales d'ajout */}
+        <AddVideoModal
+          isOpen={isAddVideoModalOpen}
+          categories={categories}
+          onClose={() => setIsAddVideoModalOpen(false)}
+          onSave={(newItem: ContentItem) => {
+            setItems([newItem, ...items]);
+          }}
+        />
+
+        <AddNoteModal
+          isOpen={isAddNoteModalOpen}
+          categories={categories}
+          onClose={() => setIsAddNoteModalOpen(false)}
+          onSave={(newItem: ContentItem) => {
+            setItems([newItem, ...items]);
+          }}
+        />
+
         <AdminLoginModal isOpen={isAdminModalOpen} onClose={() => setIsAdminModalOpen(false)} onLogin={handleLogin} />
 
         <UsersManagementModal
@@ -1576,6 +1880,29 @@ const App = () => {
           isOpen={isSettingsModalOpen}
           onClose={() => setIsSettingsModalOpen(false)}
         />
+
+        {/* Boutons flottants d'ajout (visibles uniquement si connecté) */}
+        {user.isAuthenticated && (
+          <div className="fixed bottom-6 right-6 flex flex-col gap-3 z-50">
+            {mediaMode === 'video' ? (
+              <button
+                onClick={() => setIsAddVideoModalOpen(true)}
+                className="w-14 h-14 rounded-full bg-gradient-to-r from-purple-600 to-purple-500 text-white shadow-lg shadow-purple-500/40 hover:shadow-purple-500/60 hover:scale-110 transition-all flex items-center justify-center"
+                title="Ajouter une vidéo"
+              >
+                <Plus size={28} />
+              </button>
+            ) : (
+              <button
+                onClick={() => setIsAddNoteModalOpen(true)}
+                className="w-14 h-14 rounded-full bg-gradient-to-r from-amber-600 to-amber-500 text-white shadow-lg shadow-amber-500/40 hover:shadow-amber-500/60 hover:scale-110 transition-all flex items-center justify-center"
+                title="Ajouter une note"
+              >
+                <Plus size={28} />
+              </button>
+            )}
+          </div>
+        )}
     </div>
   );
 };
