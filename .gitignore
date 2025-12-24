@@ -7,24 +7,61 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies
 node_modules
+
+# Build outputs
 dist
 dist-ssr
+*.local
 
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
 .idea
 .DS_Store
-
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
 
+# History
 /.history/
 
-.env.example
+# Environment variables
+.env
 .env.local
-.gitignore
+.env.production
+.env.development
+
+# Database
+data/
+*.db
+*.sqlite
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# TypeScript
+*.tsbuildinfo
+
+# Testing
+coverage/
+.nyc_output/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Deployment files (générés automatiquement)
+deploy/
+*.zip
+loookaa-spirit-production.zip
+prepare-deploy.sh
+prepare-deploy.bat
+DEPLOIEMENT.md
+
+# Scripts de déploiement obsolètes (ne plus utiliser !)
+deploy-git.sh

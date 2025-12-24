@@ -1,0 +1,68 @@
+# Instructions pour Claude Code
+
+## 📋 RÈGLE ABSOLUE : Consulter REFERENCE_FONCTIONNELLE.md
+
+### Avant TOUTE modification :
+
+1. **CONSULTER OBLIGATOIREMENT** le fichier `REFERENCE_FONCTIONNELLE.md`
+2. **VÉRIFIER** que la modification demandée ne crée pas de conflit avec les spécifications existantes
+3. **S'ASSURER** qu'aucune régression de code ne sera introduite
+
+### Quand je demande une modification/ajout/suppression :
+
+1. ✅ Lire `REFERENCE_FONCTIONNELLE.md` en PREMIER
+2. ✅ Analyser l'impact sur les fonctionnalités existantes
+3. ✅ Vérifier la compatibilité avec l'architecture actuelle
+4. ✅ Après la modification, **METTRE À JOUR** `REFERENCE_FONCTIONNELLE.md` si nécessaire
+
+### En cas de doute ou de conflit :
+
+❓ Si ce que je demande entre en **CONFLIT** avec le document fonctionnel :
+- **ARRÊTER**
+- **ME DEMANDER** des clarifications
+- **EXPLIQUER** le conflit détecté
+- **PROPOSER** des alternatives si possible
+
+### Exemples de conflits à détecter :
+
+- Je demande de supprimer une fonctionnalité qui est documentée comme essentielle
+- Je demande de modifier un comportement qui impacte plusieurs autres fonctionnalités
+- Je demande d'ajouter quelque chose qui contredit une spécification existante
+- Je demande de changer un type de données qui est utilisé partout
+
+## 🎯 Workflow de modification
+
+```
+1. Demande utilisateur
+     ↓
+2. Lire REFERENCE_FONCTIONNELLE.md
+     ↓
+3. Analyser l'impact
+     ↓
+4. Conflit détecté ? → DEMANDER confirmation
+     ↓
+5. Implémenter la modification
+     ↓
+6. Mettre à jour REFERENCE_FONCTIONNELLE.md
+     ↓
+7. Tester (checklist dans REFERENCE_FONCTIONNELLE.md)
+```
+
+## 🚫 NE JAMAIS :
+
+- Modifier du code sans consulter REFERENCE_FONCTIONNELLE.md
+- Supposer qu'une fonctionnalité n'est pas importante
+- Supprimer du code sans vérifier son usage
+- Ignorer un conflit potentiel
+
+## ✅ TOUJOURS :
+
+- Consulter REFERENCE_FONCTIONNELLE.md en premier
+- Documenter les nouvelles fonctionnalités
+- Mettre à jour REFERENCE_FONCTIONNELLE.md après modifications
+- Poser des questions en cas de doute
+- Préserver la compatibilité avec l'existant
+
+---
+
+**Dernière mise à jour** : 2025-12-22
