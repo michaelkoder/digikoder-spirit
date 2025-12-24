@@ -141,58 +141,72 @@ const Header = ({ user, onLogout, activeFilter, onFilterChange, onOpenAdmin, onO
       <div className="max-w-7xl mx-auto px-4 py-4">
         <div className="flex flex-col md:flex-row justify-between items-center gap-4">
           
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-purple-500 to-amber-300 flex items-center justify-center shadow-lg shadow-purple-500/20">
-              <Sun className="text-white" size={24} />
+          <div className="flex items-center gap-2 md:gap-3">
+            <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-gradient-to-tr from-purple-500 to-amber-300 flex items-center justify-center shadow-lg shadow-purple-500/20">
+              <Sun className="text-white" size={20} />
             </div>
-            <h1 className="text-2xl font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-white to-purple-200 font-serif">
+            <h1 className="text-lg md:text-2xl font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-white to-purple-200 font-serif">
               LOOOKAA <span className="text-amber-300">SPIRIT</span>
             </h1>
-            <Sun size={24} className="text-amber-300" />
+            <Sun size={20} className="text-amber-300 hidden sm:block" />
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col md:flex-row items-center gap-2 md:gap-4 w-full md:w-auto">
             {/* Mode Switch */}
             <div className="flex flex-col items-center gap-1">
               <span className="text-xs text-gray-400 font-medium">Mode</span>
               <div className="flex bg-black/30 rounded-full p-1 border border-white/10">
                 <button
                   onClick={() => setMediaMode('video')}
-                  className={`px-4 py-1.5 rounded-full font-medium text-xs transition-all flex items-center gap-1.5 ${
+                  className={`px-3 md:px-4 py-1.5 rounded-full font-medium text-xs transition-all flex items-center gap-1.5 ${
                     mediaMode === 'video'
                       ? 'bg-gradient-to-r from-purple-600 to-purple-500 text-white shadow-lg shadow-purple-500/30'
                       : 'text-gray-400 hover:text-white'
                   }`}
                 >
                   <Video size={14} />
-                  Vidéos
+                  <span className="hidden sm:inline">Vidéos</span>
                 </button>
                 <button
                   onClick={() => setMediaMode('article')}
-                  className={`px-4 py-1.5 rounded-full font-medium text-xs transition-all flex items-center gap-1.5 ${
+                  className={`px-3 md:px-4 py-1.5 rounded-full font-medium text-xs transition-all flex items-center gap-1.5 ${
                     mediaMode === 'article'
                       ? 'bg-gradient-to-r from-emerald-600 to-emerald-500 text-white shadow-lg shadow-emerald-500/30'
                       : 'text-gray-400 hover:text-white'
                   }`}
                 >
                   <BookOpen size={14} />
-                  Notes
+                  <span className="hidden sm:inline">Notes</span>
                 </button>
               </div>
             </div>
 
             {user.isAuthenticated && user.role !== 'user' ? (
-              <>
+              <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
+                {/* Boutons d'administration - 2 lignes sur mobile */}
                 {user.role === 'superadmin' && (
-                  <>
-                    <button onClick={onOpenUsers} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-full font-semibold transition-all flex items-center gap-2 text-sm">👥 Utilisateurs</button>
-                    <button onClick={onOpenCategories} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-full font-semibold transition-all flex items-center gap-2 text-sm">📂 Catégories</button>
-                    <button onClick={onOpenSettings} className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-full font-semibold transition-all flex items-center gap-2 text-sm">⚙️ Paramètres</button>
-                  </>
+                  <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2">
+                    <button onClick={onOpenUsers} className="bg-blue-600 hover:bg-blue-500 text-white px-2 sm:px-3 md:px-4 py-1.5 md:py-2 rounded-full font-medium transition-all flex items-center gap-1 text-xs sm:text-sm">
+                      <span>👥</span>
+                      <span className="hidden sm:inline">Utilisateurs</span>
+                    </button>
+                    <button onClick={onOpenCategories} className="bg-indigo-600 hover:bg-indigo-500 text-white px-2 sm:px-3 md:px-4 py-1.5 md:py-2 rounded-full font-medium transition-all flex items-center gap-1 text-xs sm:text-sm">
+                      <span>📂</span>
+                      <span className="hidden sm:inline">Catégories</span>
+                    </button>
+                    <button onClick={onOpenSettings} className="bg-purple-600 hover:bg-purple-500 text-white px-2 sm:px-3 md:px-4 py-1.5 md:py-2 rounded-full font-medium transition-all flex items-center gap-1 text-xs sm:text-sm">
+                      <span>⚙️</span>
+                      <span className="hidden sm:inline">Paramètres</span>
+                    </button>
+                  </div>
                 )}
-                <span className="text-xs text-amber-200 px-2 py-1 rounded border border-amber-300">{user.role?.toUpperCase()}</span>
-                <button onClick={onLogout} className="text-gray-400 hover:text-white transition-colors"><LogOut size={20} /></button>
-              </>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-amber-200 px-2 py-1 rounded border border-amber-300">{user.role?.toUpperCase()}</span>
+                  <button onClick={onLogout} className="text-gray-400 hover:text-white transition-colors" aria-label="Déconnexion">
+                    <LogOut size={18} />
+                  </button>
+                </div>
+              </div>
             ) : (
               <button onClick={onOpenAdmin} className="text-xs bg-white/5 text-gray-200 px-3 py-1 rounded">Se connecter</button>
             )}
