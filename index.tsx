@@ -140,25 +140,25 @@ const Header = ({ user, onLogout, activeFilter, onFilterChange, onOpenAdmin, onO
     <header className="sticky top-0 z-50 glass-panel border-b border-white/10 shadow-lg mb-8">
       <div className="max-w-7xl mx-auto px-4 py-4">
         <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-          
-          <div className="flex items-center gap-2 md:gap-3">
-            <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-gradient-to-tr from-purple-500 to-amber-300 flex items-center justify-center shadow-lg shadow-purple-500/20">
-              <Sun className="text-white" size={20} />
-            </div>
-            <h1 className="text-lg md:text-2xl font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-white to-purple-200 font-serif">
-              LOOOKAA <span className="text-amber-300">SPIRIT</span>
-            </h1>
-            <Sun size={20} className="text-amber-300 hidden sm:block" />
-          </div>
 
-          <div className="flex flex-col md:flex-row items-center gap-2 md:gap-4 w-full md:w-auto">
-            {/* Mode Switch */}
-            <div className="flex flex-col items-center gap-1">
-              <span className="text-xs text-gray-400 font-medium">Mode</span>
+          {/* Logo + Mode Switch sur la même ligne (mobile uniquement) */}
+          <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-start">
+            <div className="flex items-center gap-2 md:gap-3">
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-gradient-to-tr from-purple-500 to-amber-300 flex items-center justify-center shadow-lg shadow-purple-500/20">
+                <Sun className="text-white" size={20} />
+              </div>
+              <h1 className="text-lg md:text-2xl font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-white to-purple-200 font-serif">
+                LOOOKAA <span className="text-amber-300">SPIRIT</span>
+              </h1>
+            </div>
+
+            {/* Mode Switch - Même ligne sur mobile, séparé sur desktop */}
+            <div className="flex flex-col items-center gap-1 md:ml-4">
+              <span className="text-[10px] md:text-xs text-gray-400 font-medium">Mode</span>
               <div className="flex bg-black/30 rounded-full p-1 border border-white/10">
                 <button
                   onClick={() => setMediaMode('video')}
-                  className={`px-3 md:px-4 py-1.5 rounded-full font-medium text-xs transition-all flex items-center gap-1.5 ${
+                  className={`px-2 md:px-4 py-1.5 rounded-full font-medium text-xs transition-all flex items-center gap-1.5 ${
                     mediaMode === 'video'
                       ? 'bg-gradient-to-r from-purple-600 to-purple-500 text-white shadow-lg shadow-purple-500/30'
                       : 'text-gray-400 hover:text-white'
@@ -169,7 +169,7 @@ const Header = ({ user, onLogout, activeFilter, onFilterChange, onOpenAdmin, onO
                 </button>
                 <button
                   onClick={() => setMediaMode('article')}
-                  className={`px-3 md:px-4 py-1.5 rounded-full font-medium text-xs transition-all flex items-center gap-1.5 ${
+                  className={`px-2 md:px-4 py-1.5 rounded-full font-medium text-xs transition-all flex items-center gap-1.5 ${
                     mediaMode === 'article'
                       ? 'bg-gradient-to-r from-emerald-600 to-emerald-500 text-white shadow-lg shadow-emerald-500/30'
                       : 'text-gray-400 hover:text-white'
@@ -180,6 +180,9 @@ const Header = ({ user, onLogout, activeFilter, onFilterChange, onOpenAdmin, onO
                 </button>
               </div>
             </div>
+          </div>
+
+          <div className="flex items-center gap-2 md:gap-4 w-full md:w-auto justify-center md:justify-end">
 
             {user.isAuthenticated && user.role !== 'user' ? (
               <div className="flex items-center gap-1.5 sm:gap-2">
