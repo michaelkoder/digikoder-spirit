@@ -182,10 +182,10 @@ const Header = ({ user, onLogout, activeFilter, onFilterChange, onOpenAdmin, onO
             </div>
 
             {user.isAuthenticated && user.role !== 'user' ? (
-              <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
-                {/* Boutons d'administration - 2 lignes sur mobile */}
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                {/* Boutons d'administration - Une seule ligne */}
                 {user.role === 'superadmin' && (
-                  <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2">
+                  <>
                     <button onClick={onOpenUsers} className="bg-blue-600 hover:bg-blue-500 text-white px-2 sm:px-3 md:px-4 py-1.5 md:py-2 rounded-full font-medium transition-all flex items-center gap-1 text-xs sm:text-sm">
                       <span>👥</span>
                       <span className="hidden sm:inline">Utilisateurs</span>
@@ -198,14 +198,12 @@ const Header = ({ user, onLogout, activeFilter, onFilterChange, onOpenAdmin, onO
                       <span>⚙️</span>
                       <span className="hidden sm:inline">Paramètres</span>
                     </button>
-                  </div>
+                  </>
                 )}
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-amber-200 px-2 py-1 rounded border border-amber-300">{user.role?.toUpperCase()}</span>
-                  <button onClick={onLogout} className="text-gray-400 hover:text-white transition-colors" aria-label="Déconnexion">
-                    <LogOut size={18} />
-                  </button>
-                </div>
+                <span className="text-xs text-amber-200 px-2 py-1 rounded border border-amber-300">{user.role?.toUpperCase()}</span>
+                <button onClick={onLogout} className="text-gray-400 hover:text-white transition-colors" aria-label="Déconnexion">
+                  <LogOut size={18} />
+                </button>
               </div>
             ) : (
               <button onClick={onOpenAdmin} className="text-xs bg-white/5 text-gray-200 px-3 py-1 rounded">Se connecter</button>
