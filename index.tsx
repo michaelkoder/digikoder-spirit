@@ -139,7 +139,7 @@ const Header = ({ user, onLogout, activeFilter, onFilterChange, onOpenAdmin, onO
   return (
     <header className="sticky top-0 z-50 glass-panel border-b border-white/10 shadow-lg mb-2">
       <div className="max-w-7xl mx-auto px-2 py-2">
-        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+        <div className="flex flex-col md:flex-row justify-between items-center">
 
           {/* Logo + Mode Switch sur la même ligne (mobile uniquement) */}
           <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-start">
@@ -321,21 +321,26 @@ const ContentCard = ({ item, user, onOpenVideo, onOpenNote, onEdit, onDelete, ge
                 </div>
             </div>
             <div className="p-4">
-                <div className="flex justify-between items-start gap-2 mb-2">
-                    <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded border border-purple-500/50 text-purple-300 bg-purple-500/10">
-                        {getCategoryLabel(item.category)}
-                    </span>
-                    <div className="flex gap-2 items-center">
-                        {item.platform === 'youtube' && <Youtube size={28} className="text-red-400" />}
-                        {item.platform === 'facebook' && <Facebook size={28} className="text-blue-400" />}
-                        {item.platform === 'instagram' && <Instagram size={28} className="text-pink-400" />}
-                        {canEdit && (
-                            <>
-                                <button onClick={(e) => { e.stopPropagation(); onEdit?.(item); }} className="text-xs bg-white/5 hover:bg-white/10 px-2 py-1 rounded text-gray-200">Modifier</button>
-                                <button onClick={(e) => { e.stopPropagation(); onDelete?.(item.id); }} className="text-xs bg-red-600 hover:bg-red-500 px-2 py-1 rounded text-white">Suppr</button>
-                            </>
-                        )}
+                <div className="flex flex-col gap-2 mb-2">
+                    {/* Ligne 1: Catégorie + Icônes plateforme */}
+                    <div className="flex justify-between items-center">
+                        <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded border border-purple-500/50 text-purple-300 bg-purple-500/10">
+                            {getCategoryLabel(item.category)}
+                        </span>
+                        <div className="flex gap-2 items-center">
+                            {item.platform === 'youtube' && <Youtube size={24} className="text-red-400" />}
+                            {item.platform === 'facebook' && <Facebook size={24} className="text-blue-400" />}
+                            {item.platform === 'instagram' && <Instagram size={24} className="text-pink-400" />}
+                        </div>
                     </div>
+
+                    {/* Ligne 2: Boutons d'édition (mobile) */}
+                    {canEdit && (
+                        <div className="flex gap-2 justify-end">
+                            <button onClick={(e) => { e.stopPropagation(); onEdit?.(item); }} className="text-xs bg-white/5 hover:bg-white/10 px-2 py-1 rounded text-gray-200">Modifier</button>
+                            <button onClick={(e) => { e.stopPropagation(); onDelete?.(item.id); }} className="text-xs bg-red-600 hover:bg-red-500 px-2 py-1 rounded text-white">Suppr</button>
+                        </div>
+                    )}
                 </div>
                 <h3 className="font-serif text-sm leading-tight mb-2 text-gray-100">{item.title}</h3>
                 <div className="flex justify-between items-center pt-3 border-t border-white/5">
