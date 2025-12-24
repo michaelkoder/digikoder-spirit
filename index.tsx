@@ -240,7 +240,9 @@ const Header = ({ user, onLogout, activeFilter, onFilterChange, onOpenAdmin, onO
 };
 
 const ContentCard = ({ item, user, onOpenVideo, onOpenNote, onEdit, onDelete, getCategoryLabel }: any) => {
-    const canEdit = user?.role === 'admin' || user?.role === 'superadmin';
+    // Admin peut modifier uniquement son propre contenu
+    // Superadmin peut tout modifier
+    const canEdit = user?.role === 'superadmin' || (user?.role === 'admin' && item.addedBy === user.email);
 
     const getImageSource = () => {
         if (item.platform === 'youtube') {
@@ -634,6 +636,8 @@ const AddVideoModal = ({ isOpen, categories, onClose, onSave }: any) => {
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [titlePlaceholder, setTitlePlaceholder] = useState('Titre de la vidéo');
+  const [fetchingTitle, setFetchingTitle] = useState(false);
 
   // Détecter automatiquement la plateforme
   const detectPlatform = (url: string): 'youtube' | 'facebook' | 'instagram' | 'other' => {
@@ -642,6 +646,51 @@ const AddVideoModal = ({ isOpen, categories, onClose, onSave }: any) => {
     if (url.includes('instagram.com')) return 'instagram';
     return 'other';
   };
+
+  // Fonction pour récupérer automatiquement le titre depuis l'URL
+  const fetchTitleFromUrl = async (videoUrl: string) => {
+    if (!videoUrl.trim()) return;
+
+    setFetchingTitle(true);
+    setTitlePlaceholder('Récupération titre automatique depuis url collée...');
+
+    try {
+      const res = await apiFetch('/api/validate-url', {
+        method: 'POST',
+        body: JSON.stringify({ url: videoUrl })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.title) {
+          setTitle(data.title);
+          setTitlePlaceholder('Titre de la vidéo');
+        } else {
+          setTitlePlaceholder('Récupération du titre HS. Saisir le titre manuellement');
+        }
+      } else {
+        setTitlePlaceholder('Récupération du titre HS. Saisir le titre manuellement');
+      }
+    } catch (err) {
+      console.error('Error fetching title:', err);
+      setTitlePlaceholder('Récupération du titre HS. Saisir le titre manuellement');
+    } finally {
+      setFetchingTitle(false);
+    }
+  };
+
+  // Surveiller les changements d'URL pour auto-fetch du titre
+  useEffect(() => {
+    if (url && url.trim() !== '') {
+      const timeoutId = setTimeout(() => {
+        fetchTitleFromUrl(url);
+      }, 800); // Attendre 800ms après la saisie pour éviter trop de requêtes
+
+      return () => clearTimeout(timeoutId);
+    } else {
+      setTitlePlaceholder('Titre de la vidéo');
+    }
+  }, [url]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -666,6 +715,7 @@ const AddVideoModal = ({ isOpen, categories, onClose, onSave }: any) => {
       setUrl('');
       setCategory('');
       setDescription('');
+      setTitlePlaceholder('Titre de la vidéo');
       onClose();
     } catch (err: any) {
       setError(err.message || 'Erreur lors de la création');
@@ -682,12 +732,17 @@ const AddVideoModal = ({ isOpen, categories, onClose, onSave }: any) => {
           <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Video size={20} className="text-purple-400" /> Ajouter une vidéo</h3>
           <form onSubmit={handleSubmit} className="space-y-3">
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Titre *</label>
-                <input type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder="Titre de la vidéo" className="w-full bg-black/30 border border-white/10 rounded p-2 text-white" required />
+                <label className="block text-xs text-gray-400 mb-1">URL * (Collez l'URL en premier)</label>
+                <input type="url" value={url} onChange={e => setUrl(e.target.value)} placeholder="https://youtube.com/..." className="w-full bg-black/30 border border-white/10 rounded p-2 text-white" required />
               </div>
               <div>
-                <label className="block text-xs text-gray-400 mb-1">URL *</label>
-                <input type="url" value={url} onChange={e => setUrl(e.target.value)} placeholder="https://youtube.com/..." className="w-full bg-black/30 border border-white/10 rounded p-2 text-white" required />
+                <label className="block text-xs text-gray-400 mb-1 flex items-center gap-2">
+                  Titre *
+                  {fetchingTitle && (
+                    <span className="text-xs text-amber-400 animate-pulse">⏳ Récupération...</span>
+                  )}
+                </label>
+                <input type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder={titlePlaceholder} className="w-full bg-black/30 border border-white/10 rounded p-2 text-white" required />
               </div>
               <div>
                 <label className="block text-xs text-gray-400 mb-1">Catégorie *</label>

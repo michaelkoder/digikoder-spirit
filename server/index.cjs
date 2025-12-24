@@ -841,8 +841,17 @@ app.post('/api/validate-url', async (req, res) => {
       // oEmbed returns 200 only for valid, public videos
       // Returns 401 for private, 404 for deleted
       const alive = response.status === 200;
-      console.log(`[validate-url] Video ${videoId}: ${alive ? '✓ ALIVE' : '✗ DEAD'} (oEmbed status: ${response.status})`);
-      return res.json({ alive });
+
+      if (alive) {
+        // Parse JSON to get video title
+        const data = await response.json();
+        const title = data.title || null;
+        console.log(`[validate-url] Video ${videoId}: ✓ ALIVE, title: "${title}"`);
+        return res.json({ alive: true, title });
+      } else {
+        console.log(`[validate-url] Video ${videoId}: ✗ DEAD (oEmbed status: ${response.status})`);
+        return res.json({ alive: false });
+      }
 
     } catch (fetchError) {
       // Network error or timeout
