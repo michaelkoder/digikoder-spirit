@@ -386,7 +386,7 @@ git commit -m "feat: nouvelle fonctionnalité"
 git push
 
 # 3. Déployer
-./deploy.sh
+sh deploy.sh
 
 # 4. Vérifier
 # https://loookaa.com/spirit/

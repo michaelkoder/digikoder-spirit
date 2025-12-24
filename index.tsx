@@ -137,8 +137,8 @@ const Header = ({ user, onLogout, activeFilter, onFilterChange, onOpenAdmin, onO
   ];
 
   return (
-    <header className="sticky top-0 z-50 glass-panel border-b border-white/10 shadow-lg mb-8">
-      <div className="max-w-7xl mx-auto px-4 py-4">
+    <header className="sticky top-0 z-50 glass-panel border-b border-white/10 shadow-lg mb-2">
+      <div className="max-w-7xl mx-auto px-2 py-2">
         <div className="flex flex-col md:flex-row justify-between items-center gap-4">
 
           {/* Logo + Mode Switch sur la même ligne (mobile uniquement) */}
@@ -305,7 +305,7 @@ const ContentCard = ({ item, user, onOpenVideo, onOpenNote, onEdit, onDelete, ge
     const isVideo = item.type === 'video';
 
     return (
-        <div onClick={handleCardClick} className="break-inside-avoid mb-6 glass-panel rounded-xl overflow-hidden hover:translate-y-[-2px] transition-transform duration-300 group cursor-pointer">
+        <div onClick={handleCardClick} className="break-inside-avoid mb-3 glass-panel rounded-xl overflow-hidden hover:translate-y-[-2px] transition-transform duration-300 group cursor-pointer">
             <div className="p-2 pb-0">
                 <div className={`relative rounded-lg overflow-hidden group aspect-video flex items-center justify-center ${getImageSource() ? 'bg-black/20' : getBackgroundColor()}`}>
                     {getImageSource() && (
@@ -337,7 +337,7 @@ const ContentCard = ({ item, user, onOpenVideo, onOpenNote, onEdit, onDelete, ge
                         )}
                     </div>
                 </div>
-                <h3 className="font-serif font-bold text-lg leading-tight mb-2 text-gray-100">{item.title}</h3>
+                <h3 className="font-serif text-sm leading-tight mb-2 text-gray-100">{item.title}</h3>
                 <div className="flex justify-between items-center pt-3 border-t border-white/5">
                     <span className="text-xs text-gray-500">Par {item.addedBy}</span>
                 </div>
@@ -1837,8 +1837,8 @@ const App = () => {
             setMediaMode={setMediaMode}
         />
 
-        <main className="max-w-7xl mx-auto px-4">
-            <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-6 space-y-6">
+        <main className="max-w-7xl mx-auto px-2">
+            <div className="columns-2 lg:columns-3 xl:columns-4 gap-3 space-y-3">
                 {filteredItems.map(item => (
                     <ContentCard
                         key={item.id}
